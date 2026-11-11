@@ -2,18 +2,21 @@
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Technical Reading Room</title>
+<title>NewsAgg: Your media aggregator</title>
 <style>
 * { box-sizing: border-box }
 body { margin: 0; background: #f2f3ee; color: #172620; font: 16px/1.55 "Segoe UI", sans-serif }
 main { max-width: 1120px; margin: auto; padding: 3rem 1.4rem }
-h1 { font: 600 clamp(2.7rem, 7vw, 5rem)/1 Georgia, serif; margin: .4rem 0 1rem }
+h1 { font: 600 clamp(1.35rem, 3.5vw, 2.5rem)/1 Georgia, serif; margin: .4rem 0 1rem }
 h2 { font-size: 1.15rem; margin: 0 0 1rem }
 h3 { font: 600 1.45rem Georgia, serif; margin: .5rem 0 }
 p { margin: .6rem 0 }
 small { color: #466054 }
 .layout { display: grid; grid-template-columns: 285px 1fr; gap: 1.4rem; margin-top: 2rem; align-items: start }
 .quick-filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(12rem, .35fr); gap: 1rem; max-width: 45rem }
+.pull-controls:not([hidden]) { display: flex; align-self: end; align-items: center; gap: .65rem; flex-wrap: wrap }
+.pull-controls small { white-space: nowrap; font-variant-numeric: tabular-nums }
+@media (min-width: 701px) { .quick-filters { grid-template-columns: minmax(0, 1fr) minmax(11rem, .45fr) auto; max-width: 65rem } }
 aside, article { background: #fff; border: 1px solid #d8e0d8; border-radius: .85rem; padding: 1.2rem }
 article { margin-bottom: .85rem }
 button, select, input { font: inherit; color: inherit; background: #ecf2ed; border: 1px solid #d5e2d8; border-radius: .4rem; padding: .3rem .55rem }
@@ -34,7 +37,7 @@ a { color: #245d49 }
 </style>
 <main>
   <small id="edition">Offline preview · <a href="http://127.0.0.1:3000/">Open live archive</a></small>
-  <h1>Technical Reading Room</h1>
+  <h1>NewsAgg: Your media aggregator</h1>
   <p id="intro">Browse five articles from the first digest by subject, publisher, or technical depth.</p>
   <div class="quick-filters" role="search" aria-label="Search the archive">
     <label>Search articles<input id="search" type="search" placeholder="Search titles, summaries, or tags"></label>
@@ -48,7 +51,16 @@ a { color: #245d49 }
       <option value="720">Last month</option>
       <option value="" selected>All time</option>
     </select></label>
+    <div class="pull-controls" id="pull-controls" hidden>
+      <button type="button" id="pull-articles">Pull articles</button>
+      <small id="pull-clock">Last pull · Never</small>
+    </div>
   </div>
+  <p id="pull-status" role="status" hidden></p>
+  <details id="pull-results" hidden>
+    <summary id="pull-summary"></summary>
+    <ul id="pull-list"></ul>
+  </details>
   <div class="layout">
     <aside aria-label="Article filters">
       <h2>Topics</h2>
@@ -376,6 +388,60 @@ async function loadDashboard() {
   }
   populateFilters();
   render();
+}
+if (location.protocol !== "file:") {
+  const pullButton = document.querySelector("#pull-articles");
+  const pullClock = document.querySelector("#pull-clock");
+  const pullStatus = document.querySelector("#pull-status");
+  const pullResults = document.querySelector("#pull-results");
+  const storageKey = "newsagg.last-pull";
+  let lastPull = Number(localStorage.getItem(storageKey));
+
+  function updatePullClock() {
+    const seconds = Math.max(0, Math.floor((Date.now() - lastPull) / 1000));
+    const elapsed = new Intl.NumberFormat(undefined, { minimumIntegerDigits: 2, useGrouping: false });
+    const time = [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60]
+      .map(value => elapsed.format(value)).join(":");
+    pullClock.textContent = lastPull ? "Last pull · " + time + " ago" : "Last pull · Never";
+  }
+
+  document.querySelector("#pull-controls").hidden = false;
+  updatePullClock();
+  window.setInterval(updatePullClock, 1000);
+
+  pullButton.addEventListener("click", async () => {
+    pullButton.disabled = true;
+    pullStatus.hidden = false;
+    pullStatus.textContent = "Checking Hacker News…";
+    try {
+      const response = await fetch("/articles/pull", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}"
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Article pull failed.");
+      lastPull = Date.parse(result.pulled_at);
+      localStorage.setItem(storageKey, String(lastPull));
+      updatePullClock();
+      pullStatus.textContent = result.candidates.length ? "" : "No unseen stories found.";
+      pullStatus.hidden = Boolean(result.candidates.length);
+      pullResults.hidden = !result.candidates.length;
+      pullResults.open = Boolean(result.candidates.length);
+      document.querySelector("#pull-summary").textContent = result.candidates.length + " stories awaiting review";
+      document.querySelector("#pull-list").replaceChildren(...result.candidates.map(candidate => {
+        const item = document.createElement("li");
+        const link = element("a", candidate.title);
+        link.href = candidate.url;
+        item.append(link);
+        return item;
+      }));
+    } catch (error) {
+      pullStatus.textContent = error.message || "Article pull failed.";
+    } finally {
+      pullButton.disabled = false;
+    }
+  });
 }
 loadDashboard();
 </script>

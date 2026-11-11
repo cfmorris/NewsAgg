@@ -1,4 +1,5 @@
 import { parseArgs } from "node:util";
+import { text } from "node:stream/consumers";
 
 const api = "https://hacker-news.firebaseio.com/v0";
 const { values } = parseArgs({
@@ -39,7 +40,7 @@ function urlKey(value) {
 
 async function candidates() {
   const [archive, ids] = await Promise.all([
-    json(values.archive),
+    values.archive === "-" ? text(process.stdin).then(JSON.parse) : json(values.archive),
     json(`${api}/${values.feed}stories.json`)
   ]);
   if (!Array.isArray(archive) || !Array.isArray(ids)) {

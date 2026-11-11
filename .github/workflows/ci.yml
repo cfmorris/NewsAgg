@@ -50,7 +50,7 @@ jobs:
           host = { "HTTP_HOST" => "127.0.0.1:3000" }
           dashboard = request.get("/", host)
           abort "Dashboard failed (#{dashboard.status})" unless dashboard.ok? &&
-            dashboard.body.include?("Technical Reading Room")
+            dashboard.body.include?("NewsAgg: Your media aggregator")
 
           ENV.delete("NEO4J_PASSWORD")
           archive = request.get("/articles", host)
