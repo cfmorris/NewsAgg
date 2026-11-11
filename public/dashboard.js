@@ -117,6 +117,23 @@
     });
   }
 
+  function syncDisclosures() {
+    var panel = document.getElementById("filters-disclosure");
+    if (panel && window.matchMedia("(min-width: 901px)").matches) panel.open = true;
+
+    document.querySelectorAll("details > summary").forEach(function (summary) {
+      var details = summary.parentElement;
+      function report() {
+        summary.setAttribute("aria-expanded", details.open ? "true" : "false");
+      }
+      report();
+      if (!details.dataset.expandedBound) {
+        details.dataset.expandedBound = "true";
+        details.addEventListener("toggle", report);
+      }
+    });
+  }
+
   function submitFilters() {
     var form = document.getElementById("filter-form");
     if (form) form.requestSubmit();
@@ -130,7 +147,7 @@
       var timer;
       element.addEventListener(eventName, function () {
         if (element.id === "date-preset") {
-          ["date-from", "date-through", "published-from", "published-through"].forEach(function (id) {
+          ["date-from", "date-through"].forEach(function (id) {
             var input = document.getElementById(id);
             if (input) input.value = "";
           });
@@ -179,6 +196,7 @@
   document.addEventListener("turbo:load", function () {
     appliedVersion = versionFromDom() || appliedVersion;
     bindAutosubmit();
+    syncDisclosures();
     setupAutoPull();
     if (focusCount) {
       var count = document.getElementById("count");
@@ -196,6 +214,7 @@
   });
 
   bindAutosubmit();
+  syncDisclosures();
   appliedVersion = versionFromDom();
   window.setTimeout(poll, 15_000);
 })();

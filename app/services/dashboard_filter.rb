@@ -56,6 +56,25 @@ class DashboardFilter
     matching.length
   end
 
+  # True when either custom date field is set. The panel opens its "Custom
+  # range" disclosure so an active custom date is never hidden.
+  def custom_range_active?
+    !params_value(:date_from).empty? || !params_value(:date_through).empty?
+  end
+
+  # Counts the filter dimensions a visitor has actually narrowed. Search,
+  # dates, published dates, each facet and the topic selection count once;
+  # the collapsed panel summary reports this so no active filter is silent.
+  def active_filter_count
+    count = 0
+    count += 1 unless params_value(:q).empty?
+    count += 1 if !params_value(:date_preset).empty? || custom_range_active?
+    count += 1 if !params_value(:published_from).empty? || !params_value(:published_through).empty?
+    count += FIELDS.count { |field| !value(field).empty? }
+    count += 1 unless selected_topic.empty? && selected_heading.empty?
+    count
+  end
+
   def topic_tree
     @topic_tree ||= begin
       groups.filter_map do |heading, topics|
