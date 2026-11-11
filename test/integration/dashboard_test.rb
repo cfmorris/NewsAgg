@@ -38,6 +38,29 @@ end
 recent_timestamp = (Time.now.utc - 3600).iso8601
 older_timestamp = (Time.now.utc - (72 * 3600)).iso8601
 
+def article_cards(html)
+  html.scan(%r{<article>.*?</article>}m)
+end
+
+def card_for(html, title)
+  article_cards(html).find { |card| card.include?(title) } ||
+    raise("no article card rendered for #{title.inspect}")
+end
+
+def heading_of(card)
+  card[%r{<h3[^>]*>.*?</h3>}m] || raise("article card has no h3 title row")
+end
+
+def paragraph_of(card)
+  card[%r{<p[^>]*>.*?</p>}m] || raise("article card has no summary paragraph")
+end
+
+# True when every anchor in the card lives inside its title row or its summary.
+def links_only_in_title_row_and_summary?(card)
+  rest = card.gsub(%r{<h3[^>]*>.*?</h3>}m, "").gsub(%r{<p[^>]*>.*?</p>}m, "")
+  !rest.include?("<a ")
+end
+
 rows = [
   article(
     "archive_timestamp" => recent_timestamp,
@@ -121,6 +144,119 @@ TestReport.run do
     response = request.get("/?heading=#{CGI.escape("Computer systems organization")}", host)
     assert(response.body.include?("1 article · Computer systems organization"), "heading count label missing")
     assert(response.body.include?("A cluster observes itself"), "heading article missing")
+  end
+
+  check "tag pills sit in the title row instead of their own row" do
+    response = request.get("/", host)
+    card = card_for(response.body, "Rails renders the dashboard")
+    heading = heading_of(card)
+    assert(heading.include?("Software Engineering"), "topic pill missing from the h3 title row")
+    assert(heading.include?("AI &amp; ML"), "second topic pill missing from the h3 title row")
+    assert(heading.include?('class="tag"'), "topic pills lost their tag styling hook")
+    assert(heading.include?('data-turbo-frame="dashboard"'), "topic pills lost the Turbo frame target")
+    assert(heading.include?("aria-pressed"), "topic pills lost their pressed state")
+    assert(links_only_in_title_row_and_summary?(card),
+      "a link renders outside the title row and the summary paragraph")
+    assert(card.scan(%r{<h3}).length == 1, "the card renders more than one heading")
+  end
+
+  check "topic pills keep filtering the dashboard through the Turbo frame" do
+    response = request.get("/?topic=#{CGI.escape("AI & ML")}", host)
+    card = card_for(response.body, "Rails renders the dashboard")
+    pill = heading_of(card)[%r{<a [^>]*>AI &amp; ML</a>}]
+    assert(pill, "selected topic pill missing from the title row")
+    assert(pill.include?("topic=AI"), "topic pill no longer links to a topic filter: #{pill}")
+    assert(pill.include?('aria-pressed="true"'), "selected topic pill lost its pressed state")
+  end
+
+  check "the summary ends with the Original and discovery links inline" do
+    response = request.get("/", host)
+    summary = paragraph_of(card_for(response.body, "Rails renders the dashboard"))
+    assert(summary.include?("Controllers and views now filter articles and count them on the server."),
+      "the full summary text is not rendered")
+    assert(summary.include?(" · <a"), "summary links are not separated by the card's separator")
+    original = summary[%r{<a [^>]*>Original</a>}]
+    assert(original, "Original link missing from the summary")
+    assert(original.include?("https://example.test/rails"), "Original link points at #{original}")
+    discussion = summary[%r{<a [^>]*>HN discussion</a>}]
+    assert(discussion, "HN discussion link missing from the summary")
+    assert(discussion.include?("https://news.ycombinator.com/item?id=9001"),
+      "HN discussion link points at #{discussion}")
+    assert(summary.strip.end_with?("</a></p>"), "summary paragraph does not end with its last link")
+  end
+
+  check "other discovery sources keep their own label inline" do
+    response = request.get("/", host)
+    summary = paragraph_of(card_for(response.body, "A cluster observes itself"))
+    assert(summary[%r{<a [^>]*>Lobsters</a>}], "Lobsters discovery is not labelled by its source name")
+    assert(!summary.include?("HN discussion"), "Lobsters discovery is mislabelled as Hacker News")
+  end
+
+  check "an article without discoveries links only to the original" do
+    Rails.application.config.x.archive_factory = -> {
+      FakeArchive.new([
+        article(
+          "title" => "No discoveries here", "summary" => "A summary with nothing to discuss.",
+          "topics" => ["Software Engineering"], "url" => "https://example.test/solo",
+          "discoveries" => []
+        )
+      ])
+    }
+    response = request.get("/", host)
+    summary = paragraph_of(card_for(response.body, "No discoveries here"))
+    assert(summary[%r{<a [^>]*>Original</a>}], "Original link missing for an undiscovered article")
+    assert(!summary.include?("HN discussion"), "an undiscovered article rendered a discussion link")
+  ensure
+    Rails.application.config.x.archive_factory = -> { FakeArchive.new(rows) }
+  end
+
+  check "an article without topics renders no tag container" do
+    Rails.application.config.x.archive_factory = -> {
+      FakeArchive.new([
+        article(
+          "title" => "An untagged article", "summary" => "Summary text that stands on its own.",
+          "topics" => [], "url" => "https://example.test/untagged", "discoveries" => []
+        )
+      ])
+    }
+    response = request.get("/", host)
+    card = card_for(response.body, "An untagged article")
+    assert(!card.include?('class="tags"'), "an empty tag container is still rendered")
+    assert(heading_of(card).include?("An untagged article"), "title text missing from the heading")
+    assert(paragraph_of(card).include?("Summary text that stands on its own."),
+      "summary missing from an untagged article")
+  ensure
+    Rails.application.config.x.archive_factory = -> { FakeArchive.new(rows) }
+  end
+
+  check "an article with no summary still renders its links" do
+    Rails.application.config.x.archive_factory = -> {
+      FakeArchive.new([
+        article("title" => "A silent article", "summary" => nil, "topics" => ["AI & ML"],
+          "url" => "https://example.test/silent", "discoveries" => [])
+      ])
+    }
+    response = request.get("/", host)
+    assert(response.ok?, "expected HTTP 200, got #{response.status}")
+    summary = paragraph_of(card_for(response.body, "A silent article"))
+    assert(summary[%r{<a [^>]*>Original</a>}], "Original link missing when the summary is nil")
+  ensure
+    Rails.application.config.x.archive_factory = -> { FakeArchive.new(rows) }
+  end
+
+  check "the compact card keeps type readable and the summary unclamped" do
+    css = request.get("/dashboard.css", host).body
+    meta_size = css[/article small \{[^}]*font-size:\s*([\d.]+)rem/, 1]
+    tag_size = css[/\.tags a,[^{]*\{[^}]*font-size:\s*([\d.]+)rem/, 1]
+    title_size = css[/\.article-title \{[^}]*font-size:\s*([\d.]+)rem/, 1]
+    padding = css[/article \{[^}]*padding:\s*([\d.]+)rem [\d.]+rem/, 1]
+    assert(meta_size && meta_size.to_f >= 0.75, "meta text shrank below .75rem")
+    assert(tag_size && tag_size.to_f >= 0.75, "tag pills shrank below .75rem")
+    assert(title_size && title_size.to_f <= 1.2, "the title did not drop a type step")
+    assert(padding && padding.to_f <= 1.05, "the card padding did not tighten")
+    summary_rule = css[/article p \{[^}]*\}/m].to_s
+    assert(!summary_rule.match?(/line-clamp|text-overflow|overflow:\s*hidden/),
+      "the summary paragraph is clamped or clipped")
   end
 
   check "the publication-date facet excludes undated articles" do
