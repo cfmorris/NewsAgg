@@ -11,7 +11,7 @@
     <% unless topics.empty? %>
       <span class="tags">
         <% topics.each do |topic| %>
-          <%= link_to topic, filter_link(topic: topic, heading: nil),
+          <%= link_to topic, filter_link(topic: @filter.selected_topic == topic ? nil : topic, heading: nil),
             class: "tag", data: { turbo_frame: "dashboard" },
             "aria-pressed" => (@filter.selected_topic == topic).to_s %>
         <% end %>

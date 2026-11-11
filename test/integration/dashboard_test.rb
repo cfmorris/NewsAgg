@@ -35,6 +35,27 @@ def css_color(css, name)
   value
 end
 
+# The href of the first anchor carrying the given class and aria-pressed state.
+def filter_href(body, css_class, pressed = nil)
+  body.scan(/<a [^>]*>/).each do |anchor|
+    next unless anchor.include?("class=\"#{css_class}\"")
+    next if pressed && !anchor.include?("aria-pressed=\"#{pressed}\"")
+
+    href = anchor[/href="([^"]+)"/, 1]
+    return CGI.unescapeHTML(href) if href
+  end
+  nil
+end
+
+def query_of(href)
+  require "uri"
+  query = URI(href).query
+  return {} if query.nil? || query.empty?
+
+  parse = ->(string) { string.split("&").to_h { |pair| pair.split("=", 2).map { |part| CGI.unescape(part.tr("+", " ")) } } }
+  parse.call(query)
+end
+
 recent_timestamp = (Time.now.utc - 3600).iso8601
 older_timestamp = (Time.now.utc - (72 * 3600)).iso8601
 
@@ -161,12 +182,17 @@ TestReport.run do
   end
 
   check "topic pills keep filtering the dashboard through the Turbo frame" do
-    response = request.get("/?topic=#{CGI.escape("AI & ML")}", host)
+    response = request.get("/", host)
     card = card_for(response.body, "Rails renders the dashboard")
     pill = heading_of(card)[%r{<a [^>]*>AI &amp; ML</a>}]
-    assert(pill, "selected topic pill missing from the title row")
+    assert(pill, "topic pill missing from the title row")
     assert(pill.include?("topic=AI"), "topic pill no longer links to a topic filter: #{pill}")
-    assert(pill.include?('aria-pressed="true"'), "selected topic pill lost its pressed state")
+    assert(pill.include?('aria-pressed="false"'), "unselected topic pill lost its pressed state")
+
+    selected = request.get("/?topic=#{CGI.escape("AI & ML")}", host)
+    selected_pill = heading_of(card_for(selected.body, "Rails renders the dashboard"))[%r{<a [^>]*>AI &amp; ML</a>}]
+    assert(selected_pill, "selected topic pill missing from the title row")
+    assert(selected_pill.include?('aria-pressed="true"'), "selected topic pill lost its pressed state")
   end
 
   check "the summary ends with the Original and discovery links inline" do
@@ -345,6 +371,72 @@ TestReport.run do
     summaries.each do |summary|
       assert(summary.include?('aria-expanded='), "disclosure summary missing aria-expanded: #{summary}")
     end
+  end
+
+  check "deselecting a topic returns to all articles while keeping the other filters" do
+    response = request.get("/?topic=#{CGI.escape("AI & ML")}&heading=#{CGI.escape("Computing methodologies")}" \
+      "&q=rails&publisher=#{CGI.escape("Rails Press")}&date_preset=72", host)
+    href = filter_href(response.body, "bar topic", "true")
+    assert(href, "selected topic link missing")
+    query = query_of(href)
+    assert(!query.key?("topic"), "deselecting the topic kept topic=#{query["topic"]}")
+    assert(!query.key?("heading"), "deselecting the topic kept heading=#{query["heading"]}")
+    assert(query["q"] == "rails", "search filter was lost")
+    assert(query["publisher"] == "Rails Press", "publisher filter was lost")
+    assert(query["date_preset"] == "72", "date preset filter was lost")
+  end
+
+  check "selecting a topic still narrows it to the topic and its heading" do
+    response = request.get("/?heading=#{CGI.escape("Computing methodologies")}&q=rails", host)
+    links = response.body.scan(/<a [^>]*>.*?<\/a>/m).select do |anchor|
+      anchor.include?('class="bar topic"') && anchor.include?("AI &amp; ML")
+    end
+    href = links.filter_map { |anchor| anchor[/href="([^"]+)"/, 1] }.first
+    assert(href, "topic link missing")
+    query = query_of(CGI.unescapeHTML(href))
+    assert(query["topic"] == "AI & ML", "topic was not selected")
+    assert(query["heading"] == "Computing methodologies", "topic link lost its heading")
+    assert(query["q"] == "rails", "selecting a topic dropped the search filter")
+  end
+
+  check "deselecting a heading returns to all articles and keeps the other filters" do
+    response = request.get("/?heading=#{CGI.escape("Software and its engineering")}&q=rails&publisher=#{CGI.escape("Rails Press")}", host)
+    href = filter_href(response.body, "bar heading-caption", "true")
+    assert(href, "selected heading link missing")
+    query = query_of(href)
+    assert(!query.key?("heading"), "deselecting the heading kept heading=#{query["heading"]}")
+    assert(!query.key?("topic"), "deselecting the heading added a topic")
+    assert(query["q"] == "rails", "search filter was lost")
+    assert(query["publisher"] == "Rails Press", "publisher filter was lost")
+  end
+
+  check "deselecting an article tag returns to all articles and keeps the other filters" do
+    response = request.get("/?topic=#{CGI.escape("AI & ML")}&heading=#{CGI.escape("Computing methodologies")}&q=rails", host)
+    href = filter_href(response.body, "tag", "true")
+    assert(href, "selected article tag link missing")
+    query = query_of(href)
+    assert(!query.key?("topic"), "deselecting the tag kept topic=#{query["topic"]}")
+    assert(!query.key?("heading"), "deselecting the tag kept heading=#{query["heading"]}")
+    assert(query["q"] == "rails", "search filter was lost")
+  end
+
+  check "the filters panel opens for active filters and exposes its state hook" do
+    active = request.get("/?q=rails", host).body[/<details class="filters-disclosure"[^>]*>/]
+    assert(active, "filters disclosure missing")
+    assert(active.match?(/\sopen[\s>]/), "panel should start open when a filter is active")
+    key = active[/data-filters-state-key="([^"]+)"/, 1]
+    assert(key && !key.empty?, "filters disclosure exposes no state storage key")
+
+    idle = request.get("/", host).body[/<details class="filters-disclosure"[^>]*>/]
+    assert(idle, "filters disclosure missing")
+    assert(!idle.match?(/\sopen[\s>]/), "panel should start closed when no filter is active")
+  end
+
+  check "clear filters still drops every filter" do
+    response = request.get("/?q=rails&topic=#{CGI.escape("AI & ML")}&publisher=#{CGI.escape("Rails Press")}", host)
+    anchor = response.body.scan(/<a [^>]*>Clear filters<\/a>/).first
+    assert(anchor, "clear filters link missing")
+    assert(anchor.include?('href="/"'), "clear filters should link to a bare root path: #{anchor}")
   end
 
   check "the panel stays scrollable and pinned above 900px" do
