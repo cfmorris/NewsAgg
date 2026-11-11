@@ -117,9 +117,68 @@
     });
   }
 
+  var FILTERS_STATE_KEY = "newsagg.filters-panel-state";
+
+  function filtersPanel() {
+    return document.getElementById("filters-disclosure");
+  }
+
+  function storedFiltersState(key) {
+    try {
+      return window.localStorage.getItem(key);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function storeFiltersState(key, open) {
+    try {
+      window.localStorage.setItem(key, open ? "open" : "closed");
+    } catch (_) {
+      // Persistence is a convenience; the panel still works without storage.
+    }
+  }
+
+  function filtersKey(panel) {
+    return (panel && panel.dataset.filtersStateKey) || FILTERS_STATE_KEY;
+  }
+
+  // Re-apply the visitor's remembered open/closed choice after every render so
+  // removing a filter never collapses the panel they are working in. The server
+  // still renders the first-paint state; on first visit that state is recorded
+  // as the visitor's starting preference.
+  function applyFiltersState() {
+    var panel = filtersPanel();
+    if (!panel) return;
+    if (window.matchMedia("(min-width: 901px)").matches) {
+      panel.open = true;
+      return;
+    }
+    var key = filtersKey(panel);
+    var stored = storedFiltersState(key);
+    if (stored === null) {
+      storeFiltersState(key, panel.open);
+      return;
+    }
+    panel.open = stored === "open";
+  }
+
+  function bindFiltersState() {
+    var panel = filtersPanel();
+    if (!panel || panel.dataset.stateBound) return;
+    var summary = panel.querySelector("summary");
+    if (!summary) return;
+    panel.dataset.stateBound = "true";
+    summary.addEventListener("click", function () {
+      if (window.matchMedia("(min-width: 901px)").matches) return;
+      // The default action flips `open` right after this handler runs.
+      storeFiltersState(filtersKey(panel), !panel.open);
+    });
+  }
+
   function syncDisclosures() {
-    var panel = document.getElementById("filters-disclosure");
-    if (panel && window.matchMedia("(min-width: 901px)").matches) panel.open = true;
+    applyFiltersState();
+    bindFiltersState();
 
     document.querySelectorAll("details > summary").forEach(function (summary) {
       var details = summary.parentElement;
@@ -203,6 +262,12 @@
       if (count) count.focus({ preventScroll: true });
       focusCount = false;
     }
+  });
+
+  // Turbo replaces the dashboard frame (and the whole page) outside of
+  // turbo:load, so the remembered panel state has to be re-applied each time.
+  ["turbo:frame-load", "turbo:render"].forEach(function (eventName) {
+    document.addEventListener(eventName, syncDisclosures);
   });
 
   document.addEventListener("click", function (event) {

@@ -5,17 +5,18 @@
       article["archive_date"] && "Added #{article["archive_date"]}"].compact.reject(&:empty?) %>
     <% meta.each do |item| %><span><%= item %></span><% end %>
   </small>
-  <h3><%= article["title"] %></h3>
-  <p><%= article["summary"] %></p>
-  <div class="tags">
-    <% Array(article["topics"]).each do |topic| %>
-      <%= link_to topic, filter_link(topic: topic, heading: nil),
-        class: "tag", data: { turbo_frame: "dashboard" },
-        "aria-pressed" => (@filter.selected_topic == topic).to_s %>
+  <% topics = Array(article["topics"]).reject { |topic| topic.to_s.empty? } %>
+  <h3 class="article-title" aria-label="<%= article["title"] %>">
+    <span class="article-title-text"><%= article["title"] %></span>
+    <% unless topics.empty? %>
+      <span class="tags">
+        <% topics.each do |topic| %>
+          <%= link_to topic, filter_link(topic: @filter.selected_topic == topic ? nil : topic, heading: nil),
+            class: "tag", data: { turbo_frame: "dashboard" },
+            "aria-pressed" => (@filter.selected_topic == topic).to_s %>
+        <% end %>
+      </span>
     <% end %>
-  </div>
-  <%= link_to "Original", article["url"] %>
-  <% Array(article["discoveries"]).each do |discovery| %>
-    · <%= link_to(discovery["source"] == "Hacker News" ? "HN discussion" : discovery["source"], discovery["url"]) %>
-  <% end %>
+  </h3>
+  <p><%= article["summary"] %><% if article["url"] %> · <%= link_to "Original", article["url"] %><% end %><% Array(article["discoveries"]).each do |discovery| %> · <%= link_to(discovery["source"] == "Hacker News" ? "HN discussion" : discovery["source"], discovery["url"]) %><% end %></p>
 </article>

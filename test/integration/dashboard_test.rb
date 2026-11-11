@@ -35,8 +35,52 @@ def css_color(css, name)
   value
 end
 
+# The href of the first anchor carrying the given class and aria-pressed state.
+def filter_href(body, css_class, pressed = nil)
+  body.scan(/<a [^>]*>/).each do |anchor|
+    next unless anchor.include?("class=\"#{css_class}\"")
+    next if pressed && !anchor.include?("aria-pressed=\"#{pressed}\"")
+
+    href = anchor[/href="([^"]+)"/, 1]
+    return CGI.unescapeHTML(href) if href
+  end
+  nil
+end
+
+def query_of(href)
+  require "uri"
+  query = URI(href).query
+  return {} if query.nil? || query.empty?
+
+  parse = ->(string) { string.split("&").to_h { |pair| pair.split("=", 2).map { |part| CGI.unescape(part.tr("+", " ")) } } }
+  parse.call(query)
+end
+
 recent_timestamp = (Time.now.utc - 3600).iso8601
 older_timestamp = (Time.now.utc - (72 * 3600)).iso8601
+
+def article_cards(html)
+  html.scan(%r{<article>.*?</article>}m)
+end
+
+def card_for(html, title)
+  article_cards(html).find { |card| card.include?(title) } ||
+    raise("no article card rendered for #{title.inspect}")
+end
+
+def heading_of(card)
+  card[%r{<h3[^>]*>.*?</h3>}m] || raise("article card has no h3 title row")
+end
+
+def paragraph_of(card)
+  card[%r{<p[^>]*>.*?</p>}m] || raise("article card has no summary paragraph")
+end
+
+# True when every anchor in the card lives inside its title row or its summary.
+def links_only_in_title_row_and_summary?(card)
+  rest = card.gsub(%r{<h3[^>]*>.*?</h3>}m, "").gsub(%r{<p[^>]*>.*?</p>}m, "")
+  !rest.include?("<a ")
+end
 
 rows = [
   article(
@@ -121,6 +165,124 @@ TestReport.run do
     response = request.get("/?heading=#{CGI.escape("Computer systems organization")}", host)
     assert(response.body.include?("1 article · Computer systems organization"), "heading count label missing")
     assert(response.body.include?("A cluster observes itself"), "heading article missing")
+  end
+
+  check "tag pills sit in the title row instead of their own row" do
+    response = request.get("/", host)
+    card = card_for(response.body, "Rails renders the dashboard")
+    heading = heading_of(card)
+    assert(heading.include?("Software Engineering"), "topic pill missing from the h3 title row")
+    assert(heading.include?("AI &amp; ML"), "second topic pill missing from the h3 title row")
+    assert(heading.include?('class="tag"'), "topic pills lost their tag styling hook")
+    assert(heading.include?('data-turbo-frame="dashboard"'), "topic pills lost the Turbo frame target")
+    assert(heading.include?("aria-pressed"), "topic pills lost their pressed state")
+    assert(links_only_in_title_row_and_summary?(card),
+      "a link renders outside the title row and the summary paragraph")
+    assert(card.scan(%r{<h3}).length == 1, "the card renders more than one heading")
+  end
+
+  check "topic pills keep filtering the dashboard through the Turbo frame" do
+    response = request.get("/", host)
+    card = card_for(response.body, "Rails renders the dashboard")
+    pill = heading_of(card)[%r{<a [^>]*>AI &amp; ML</a>}]
+    assert(pill, "topic pill missing from the title row")
+    assert(pill.include?("topic=AI"), "topic pill no longer links to a topic filter: #{pill}")
+    assert(pill.include?('aria-pressed="false"'), "unselected topic pill lost its pressed state")
+
+    selected = request.get("/?topic=#{CGI.escape("AI & ML")}", host)
+    selected_pill = heading_of(card_for(selected.body, "Rails renders the dashboard"))[%r{<a [^>]*>AI &amp; ML</a>}]
+    assert(selected_pill, "selected topic pill missing from the title row")
+    assert(selected_pill.include?('aria-pressed="true"'), "selected topic pill lost its pressed state")
+  end
+
+  check "the summary ends with the Original and discovery links inline" do
+    response = request.get("/", host)
+    summary = paragraph_of(card_for(response.body, "Rails renders the dashboard"))
+    assert(summary.include?("Controllers and views now filter articles and count them on the server."),
+      "the full summary text is not rendered")
+    assert(summary.include?(" · <a"), "summary links are not separated by the card's separator")
+    original = summary[%r{<a [^>]*>Original</a>}]
+    assert(original, "Original link missing from the summary")
+    assert(original.include?("https://example.test/rails"), "Original link points at #{original}")
+    discussion = summary[%r{<a [^>]*>HN discussion</a>}]
+    assert(discussion, "HN discussion link missing from the summary")
+    assert(discussion.include?("https://news.ycombinator.com/item?id=9001"),
+      "HN discussion link points at #{discussion}")
+    assert(summary.strip.end_with?("</a></p>"), "summary paragraph does not end with its last link")
+  end
+
+  check "other discovery sources keep their own label inline" do
+    response = request.get("/", host)
+    summary = paragraph_of(card_for(response.body, "A cluster observes itself"))
+    assert(summary[%r{<a [^>]*>Lobsters</a>}], "Lobsters discovery is not labelled by its source name")
+    assert(!summary.include?("HN discussion"), "Lobsters discovery is mislabelled as Hacker News")
+  end
+
+  check "an article without discoveries links only to the original" do
+    Rails.application.config.x.archive_factory = -> {
+      FakeArchive.new([
+        article(
+          "title" => "No discoveries here", "summary" => "A summary with nothing to discuss.",
+          "topics" => ["Software Engineering"], "url" => "https://example.test/solo",
+          "discoveries" => []
+        )
+      ])
+    }
+    response = request.get("/", host)
+    summary = paragraph_of(card_for(response.body, "No discoveries here"))
+    assert(summary[%r{<a [^>]*>Original</a>}], "Original link missing for an undiscovered article")
+    assert(!summary.include?("HN discussion"), "an undiscovered article rendered a discussion link")
+  ensure
+    Rails.application.config.x.archive_factory = -> { FakeArchive.new(rows) }
+  end
+
+  check "an article without topics renders no tag container" do
+    Rails.application.config.x.archive_factory = -> {
+      FakeArchive.new([
+        article(
+          "title" => "An untagged article", "summary" => "Summary text that stands on its own.",
+          "topics" => [], "url" => "https://example.test/untagged", "discoveries" => []
+        )
+      ])
+    }
+    response = request.get("/", host)
+    card = card_for(response.body, "An untagged article")
+    assert(!card.include?('class="tags"'), "an empty tag container is still rendered")
+    assert(heading_of(card).include?("An untagged article"), "title text missing from the heading")
+    assert(paragraph_of(card).include?("Summary text that stands on its own."),
+      "summary missing from an untagged article")
+  ensure
+    Rails.application.config.x.archive_factory = -> { FakeArchive.new(rows) }
+  end
+
+  check "an article with no summary still renders its links" do
+    Rails.application.config.x.archive_factory = -> {
+      FakeArchive.new([
+        article("title" => "A silent article", "summary" => nil, "topics" => ["AI & ML"],
+          "url" => "https://example.test/silent", "discoveries" => [])
+      ])
+    }
+    response = request.get("/", host)
+    assert(response.ok?, "expected HTTP 200, got #{response.status}")
+    summary = paragraph_of(card_for(response.body, "A silent article"))
+    assert(summary[%r{<a [^>]*>Original</a>}], "Original link missing when the summary is nil")
+  ensure
+    Rails.application.config.x.archive_factory = -> { FakeArchive.new(rows) }
+  end
+
+  check "the compact card keeps type readable and the summary unclamped" do
+    css = request.get("/dashboard.css", host).body
+    meta_size = css[/article small \{[^}]*font-size:\s*([\d.]+)rem/, 1]
+    tag_size = css[/\.tags a,[^{]*\{[^}]*font-size:\s*([\d.]+)rem/, 1]
+    title_size = css[/\.article-title \{[^}]*font-size:\s*([\d.]+)rem/, 1]
+    padding = css[/article \{[^}]*padding:\s*([\d.]+)rem [\d.]+rem/, 1]
+    assert(meta_size && meta_size.to_f >= 0.75, "meta text shrank below .75rem")
+    assert(tag_size && tag_size.to_f >= 0.75, "tag pills shrank below .75rem")
+    assert(title_size && title_size.to_f <= 1.2, "the title did not drop a type step")
+    assert(padding && padding.to_f <= 1.05, "the card padding did not tighten")
+    summary_rule = css[/article p \{[^}]*\}/m].to_s
+    assert(!summary_rule.match?(/line-clamp|text-overflow|overflow:\s*hidden/),
+      "the summary paragraph is clamped or clipped")
   end
 
   check "the publication-date facet excludes undated articles" do
@@ -209,6 +371,72 @@ TestReport.run do
     summaries.each do |summary|
       assert(summary.include?('aria-expanded='), "disclosure summary missing aria-expanded: #{summary}")
     end
+  end
+
+  check "deselecting a topic returns to all articles while keeping the other filters" do
+    response = request.get("/?topic=#{CGI.escape("AI & ML")}&heading=#{CGI.escape("Computing methodologies")}" \
+      "&q=rails&publisher=#{CGI.escape("Rails Press")}&date_preset=72", host)
+    href = filter_href(response.body, "bar topic", "true")
+    assert(href, "selected topic link missing")
+    query = query_of(href)
+    assert(!query.key?("topic"), "deselecting the topic kept topic=#{query["topic"]}")
+    assert(!query.key?("heading"), "deselecting the topic kept heading=#{query["heading"]}")
+    assert(query["q"] == "rails", "search filter was lost")
+    assert(query["publisher"] == "Rails Press", "publisher filter was lost")
+    assert(query["date_preset"] == "72", "date preset filter was lost")
+  end
+
+  check "selecting a topic still narrows it to the topic and its heading" do
+    response = request.get("/?heading=#{CGI.escape("Computing methodologies")}&q=rails", host)
+    links = response.body.scan(/<a [^>]*>.*?<\/a>/m).select do |anchor|
+      anchor.include?('class="bar topic"') && anchor.include?("AI &amp; ML")
+    end
+    href = links.filter_map { |anchor| anchor[/href="([^"]+)"/, 1] }.first
+    assert(href, "topic link missing")
+    query = query_of(CGI.unescapeHTML(href))
+    assert(query["topic"] == "AI & ML", "topic was not selected")
+    assert(query["heading"] == "Computing methodologies", "topic link lost its heading")
+    assert(query["q"] == "rails", "selecting a topic dropped the search filter")
+  end
+
+  check "deselecting a heading returns to all articles and keeps the other filters" do
+    response = request.get("/?heading=#{CGI.escape("Software and its engineering")}&q=rails&publisher=#{CGI.escape("Rails Press")}", host)
+    href = filter_href(response.body, "bar heading-caption", "true")
+    assert(href, "selected heading link missing")
+    query = query_of(href)
+    assert(!query.key?("heading"), "deselecting the heading kept heading=#{query["heading"]}")
+    assert(!query.key?("topic"), "deselecting the heading added a topic")
+    assert(query["q"] == "rails", "search filter was lost")
+    assert(query["publisher"] == "Rails Press", "publisher filter was lost")
+  end
+
+  check "deselecting an article tag returns to all articles and keeps the other filters" do
+    response = request.get("/?topic=#{CGI.escape("AI & ML")}&heading=#{CGI.escape("Computing methodologies")}&q=rails", host)
+    href = filter_href(response.body, "tag", "true")
+    assert(href, "selected article tag link missing")
+    query = query_of(href)
+    assert(!query.key?("topic"), "deselecting the tag kept topic=#{query["topic"]}")
+    assert(!query.key?("heading"), "deselecting the tag kept heading=#{query["heading"]}")
+    assert(query["q"] == "rails", "search filter was lost")
+  end
+
+  check "the filters panel opens for active filters and exposes its state hook" do
+    active = request.get("/?q=rails", host).body[/<details class="filters-disclosure"[^>]*>/]
+    assert(active, "filters disclosure missing")
+    assert(active.match?(/\sopen[\s>]/), "panel should start open when a filter is active")
+    key = active[/data-filters-state-key="([^"]+)"/, 1]
+    assert(key && !key.empty?, "filters disclosure exposes no state storage key")
+
+    idle = request.get("/", host).body[/<details class="filters-disclosure"[^>]*>/]
+    assert(idle, "filters disclosure missing")
+    assert(!idle.match?(/\sopen[\s>]/), "panel should start closed when no filter is active")
+  end
+
+  check "clear filters still drops every filter" do
+    response = request.get("/?q=rails&topic=#{CGI.escape("AI & ML")}&publisher=#{CGI.escape("Rails Press")}", host)
+    anchor = response.body.scan(/<a [^>]*>Clear filters<\/a>/).first
+    assert(anchor, "clear filters link missing")
+    assert(anchor.include?('href="/"'), "clear filters should link to a bare root path: #{anchor}")
   end
 
   check "the panel stays scrollable and pinned above 900px" do

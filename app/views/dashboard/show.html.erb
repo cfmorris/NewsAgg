@@ -21,7 +21,7 @@
   <turbo-frame id="dashboard">
     <div class="layout">
       <aside class="filter-panel" aria-label="Article filters">
-        <details class="filters-disclosure" id="filters-disclosure" <%= "open" if @filter.active_filter_count.positive? %>>
+        <details class="filters-disclosure" id="filters-disclosure" data-filters-state-key="newsagg.filters-panel-state" <%= "open" if @filter.active_filter_count.positive? %>>
           <summary class="filters-summary" aria-expanded="<%= @filter.active_filter_count.positive? %>">
             <span class="filters-summary-title">Filters</span>
             <span class="filter-count"><%= @filter.active_filter_count.zero? ? "No filters active" : "#{@filter.active_filter_count} active" %></span>
@@ -49,7 +49,8 @@
                 <% end %>
                 <% if group[:expanded] %>
                   <% group[:topics].each do |topic| %>
-                    <%= link_to filter_link(topic: topic[:selected] ? nil : topic[:name], heading: group[:heading]),
+                    <%= link_to filter_link(topic: topic[:selected] ? nil : topic[:name],
+                      heading: topic[:selected] ? nil : group[:heading]),
                       class: "bar topic",
                       data: { turbo_frame: "dashboard" },
                       "aria-pressed" => topic[:selected].to_s,

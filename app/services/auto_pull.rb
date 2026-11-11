@@ -1,3 +1,5 @@
+require "fileutils"
+
 require_relative "auto_pull_supervisor"
 require_relative "ingestion_runner"
 
@@ -6,6 +8,7 @@ module AutoPull
   FLAG_NAME = "auto-pull.enabled"
   LOCK_NAME = "auto-pull-worker.lock"
   STATE_NAME = "auto-pull.state.json"
+  RESET_MESSAGE = "Auto-pull reset to off on boot"
   FEED = "new"
   LIMIT = 10
 
@@ -44,10 +47,25 @@ module AutoPull
     env["NEWSAGG_AUTO_PULL"].to_s.strip == "0"
   end
 
+  # The flag is an opt-in for the running process, not a saved preference, so
+  # every boot clears it before the supervisor can pull. Only the flag goes: the
+  # policy state file keeps the day's budget and the breaker counters.
+  def reset_flag_on_boot(path: flag_path, err: $stderr)
+    return false unless File.file?(path)
+
+    FileUtils.rm_f(path)
+    err&.puts RESET_MESSAGE
+    true
+  rescue SystemCallError => error
+    err&.puts "Auto-pull could not reset #{path} on boot: #{error.message}"
+    false
+  end
+
   # Boots the in-process puller from config.ru and returns it, or nil when the
   # process opted out. Rails runner and the console never load config.ru, so
   # they never start a puller.
   def boot(root: Rails.root, env: ENV, runner: nil, interval: nil, err: $stderr)
+    reset_flag_on_boot(path: flag_path, err: err)
     return nil if disabled_by_env?(env)
 
     supervisor = AutoPullSupervisor.new(

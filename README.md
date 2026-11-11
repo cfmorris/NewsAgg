@@ -68,10 +68,11 @@ Auto-pull runs inside the web process, so `bundle exec puma -b tcp://127.0.0.1:3
 is the only process to start. Auto-pull starts off. Turn it on beside **Date
 added** and the server pulls a batch immediately, then every 60 seconds, until
 you turn it off; a batch already running finishes, and the dashboard shows the
-last pull time and any error beside the toggle. The setting lives in
-`tmp/auto-pull.enabled`, so it survives a restart. A pid lock at
-`tmp/auto-pull-worker.lock` stops a second web process on the same checkout from
-pulling alongside the first.
+last pull time and any error beside the toggle. The toggle writes
+`tmp/auto-pull.enabled`; the flag is an opt-in for the running process only, so
+a restart clears it and Auto-pull starts off again (the server logs `Auto-pull
+reset to off on boot`). A pid lock at `tmp/auto-pull-worker.lock` stops a second
+web process on the same checkout from pulling alongside the first.
 
 The supervisor boots from `config.ru`, so `rails runner` and the console never
 start a puller. Set `NEWSAGG_AUTO_PULL=0` to keep the web process from pulling.
@@ -151,12 +152,13 @@ pipeline against recorded Hacker News and article fixtures, a fake DeepSeek
 endpoint, and a disposable in-memory archive, including retry handling and secret
 redaction. The third drives the in-process Auto-pull supervisor with a fake
 ingestion runner and a short interval: immediate pull on enable, the next tick,
-stopping on disable, skipping an in-flight trigger, the `/auto-pull` payload, and
-the single-process pid lock. The fourth pins the budget and breaker behavior
-with an injected clock and fake runner: the summary and dollar caps stopping a
-run mid-list, the local-day rollover, the `:config` latch, the 60s → 5m → 15m →
-30m backoff with a half-open probe, zero-new-story success, exact usage pricing,
-and the policy state surviving a restart.
+stopping on disable, skipping an in-flight trigger, the `/auto-pull` payload, the
+single-process pid lock, and the boot reset that clears a leftover flag before
+anything pulls while leaving the policy state alone. The fourth pins the budget
+and breaker behavior with an injected clock and fake runner: the summary and
+dollar caps stopping a run mid-list, the local-day rollover, the `:config`
+latch, the 60s → 5m → 15m → 30m backoff with a half-open probe, zero-new-story
+success, exact usage pricing, and the policy state surviving a restart.
 
 The repeat-import integration test needs a throwaway Neo4j server. The wrapper
 downloads pinned Neo4j Community 5.26.0 and, when Java 21 is not available, a
