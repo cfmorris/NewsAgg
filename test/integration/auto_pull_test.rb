@@ -1,10 +1,12 @@
 require "fileutils"
 require "json"
 require "rack/mock"
+require "stringio"
 require "tmpdir"
 require "timeout"
 
 require_relative "../../config/environment"
+require_relative "../../app/services/auto_pull"
 require_relative "../../app/services/auto_pull_supervisor"
 require_relative "../support/assertions"
 
@@ -83,6 +85,33 @@ end
 
 request = Rack::MockRequest.new(Rails.application)
 host = { "HTTP_HOST" => "127.0.0.1:3000" }
+
+# Boots the config.ru entry point against throwaway flag, lock and state paths
+# so a test exercises the real boot path without touching the checkout's tmp/.
+def with_boot_paths
+  previous = nil
+  directory = Dir.mktmpdir("newsagg-auto-pull-boot-")
+  paths = {
+    flag: File.join(directory, "auto-pull.enabled"),
+    lock: File.join(directory, "auto-pull-worker.lock"),
+    state: File.join(directory, "auto-pull.state.json")
+  }
+  config = Rails.application.config.x
+  previous = [config.auto_pull_flag_path, config.auto_pull_lock_path,
+    config.auto_pull_state_path, config.auto_pull_supervisor]
+  config.auto_pull_flag_path = paths[:flag]
+  config.auto_pull_lock_path = paths[:lock]
+  config.auto_pull_state_path = paths[:state]
+  config.auto_pull_supervisor = nil
+  yield paths
+ensure
+  config&.auto_pull_supervisor&.stop
+  if previous
+    config.auto_pull_flag_path, config.auto_pull_lock_path,
+      config.auto_pull_state_path, config.auto_pull_supervisor = previous
+  end
+  FileUtils.remove_entry(directory) if directory && Dir.exist?(directory)
+end
 
 TestReport.run do
   check "enabling Auto-pull runs a pull immediately instead of waiting for the interval" do
@@ -222,6 +251,103 @@ TestReport.run do
     ensure
       supervisor.stop
       FileUtils.remove_entry(directory)
+    end
+  end
+
+  check "a leftover Auto-pull flag is cleared on boot before anything pulls" do
+    with_boot_paths do |paths|
+      File.write(paths[:flag], "")
+      runner = RecordingRunner.new
+      log = StringIO.new
+
+      supervisor = AutoPull.boot(root: Rails.root, env: {}, runner: runner,
+        interval: 600, err: log)
+      Rails.application.config.x.auto_pull_supervisor = supervisor
+
+      assert(supervisor, "boot did not start a supervisor")
+      assert(!File.exist?(paths[:flag]), "the leftover flag survived boot")
+      assert(!supervisor.enabled?, "the supervisor reports Auto-pull on after boot")
+      assert(log.string.include?("Auto-pull reset to off on boot"),
+        "boot did not log the reset (#{log.string.inspect})")
+
+      sleep 0.3
+      assert(runner.runs.zero?, "boot pulled with a leftover flag (#{runner.runs} run(s))")
+      assert(supervisor.state[:last_run_at].nil?, "a pull ran during boot")
+
+      payload = JSON.parse(request.get("/auto-pull", host).body)
+      worker = payload["worker"]
+      assert(payload["enabled"] == false, "GET /auto-pull reports the toggle on")
+      assert(worker["running"] == true, "GET /auto-pull reports no running worker")
+      assert(worker["reason"] == "ok", "worker reason was #{worker["reason"].inspect}")
+      assert(worker["last_error"].nil?, "worker error was #{worker["last_error"].inspect}")
+      assert(worker["last_run_at"].nil?, "worker last_run_at was #{worker["last_run_at"].inspect}")
+    end
+  end
+
+  check "boot leaves the Auto-pull policy state untouched" do
+    with_boot_paths do |paths|
+      seeded = {
+        "day" => AutoPull::Policy.day_for(Time.now),
+        "spent_usd" => 0.0431,
+        "summaries" => 7,
+        "failures" => 2,
+        "open_until" => (Time.now.utc + 300).iso8601,
+        "last_failure_kind" => "transient",
+        "last_error" => "Hacker News returned HTTP 503",
+        "config_signature" => "abc123"
+      }
+      File.write(paths[:state], JSON.pretty_generate(seeded))
+      runner = RecordingRunner.new
+
+      supervisor = AutoPull.boot(root: Rails.root, env: {}, runner: runner,
+        interval: 600, err: StringIO.new)
+      Rails.application.config.x.auto_pull_supervisor = supervisor
+      assert(supervisor, "boot did not start a supervisor")
+
+      stored = JSON.parse(File.read(paths[:state]))
+      assert(stored == seeded, "boot rewrote the policy state (#{stored.inspect})")
+
+      worker = supervisor.state
+      assert(worker[:spent_usd].to_f == 0.0431, "boot reset spent_usd to #{worker[:spent_usd]}")
+      assert(worker[:summaries].to_i == 7, "boot reset summaries to #{worker[:summaries]}")
+      assert(worker[:failures].to_i == 2, "boot reset failures to #{worker[:failures]}")
+    end
+  end
+
+  check "NEWSAGG_AUTO_PULL=0 boots no supervisor and no puller" do
+    with_boot_paths do |paths|
+      File.write(paths[:flag], "")
+      runner = RecordingRunner.new
+
+      supervisor = AutoPull.boot(root: Rails.root, env: { "NEWSAGG_AUTO_PULL" => "0" },
+        runner: runner, interval: 600, err: StringIO.new)
+      assert(supervisor.nil?, "boot started a supervisor despite NEWSAGG_AUTO_PULL=0")
+      assert(!File.exist?(paths[:lock]), "a puller took the lock despite NEWSAGG_AUTO_PULL=0")
+
+      sleep 0.2
+      assert(runner.runs.zero?, "an opted-out process pulled")
+    end
+  end
+
+  check "after the boot reset, enabling Auto-pull still pulls once at once" do
+    with_boot_paths do |paths|
+      File.write(paths[:flag], "")
+      runner = RecordingRunner.new
+
+      supervisor = AutoPull.boot(root: Rails.root, env: {}, runner: runner,
+        interval: 600, err: StringIO.new)
+      Rails.application.config.x.auto_pull_supervisor = supervisor
+      assert(supervisor, "boot did not start a supervisor")
+
+      sleep 0.2
+      assert(runner.runs.zero?, "boot pulled before anyone enabled Auto-pull")
+
+      response = auto_pull_request(request, host, true)
+      assert(response.status == 200, "enabling failed with #{response.status}")
+      runner.wait_for_start
+      sleep 0.2
+      assert(runner.runs == 1, "expected one immediate pull, got #{runner.runs} run(s)")
+      assert(File.file?(paths[:flag]), "enabling did not write the flag")
     end
   end
 end
