@@ -1,0 +1,163 @@
+<main class="broadsheet">
+  <header class="broadsheet-masthead">
+    <p class="broadsheet-kicker">The reading room front page</p>
+    <h1>The Archive Broadsheet</h1>
+    <p class="broadsheet-edition">
+      Edition of
+      <time datetime="<%= @digest.edition_date %>"><%= @digest.edition_date || "an undated day" %></time>
+      <span class="broadsheet-nav"><a href="/">Back to the dashboard</a></span>
+    </p>
+    <dl class="broadsheet-counts">
+      <div><dt>Articles</dt><dd><%= pluralize(@digest.article_count, "article") %></dd></div>
+      <div><dt>Topics</dt><dd><%= pluralize(@digest.topic_count, "topic") %></dd></div>
+      <div><dt>Publishers</dt><dd><%= pluralize(@digest.publisher_count, "publisher") %></dd></div>
+      <div><dt>Source</dt><dd><%= @digest.source_names.presence&.to_sentence || "No source on record" %></dd></div>
+    </dl>
+  </header>
+
+  <% if @archive_error %>
+    <p class="notice notice-error" role="alert"><%= @archive_error %></p>
+  <% end %>
+
+  <% if @digest.empty? %>
+    <section class="empty-state" role="status">
+      <h2>No edition today</h2>
+      <p>The presses are idle: the archive holds no articles yet.</p>
+      <p>The next import will set the type. Until then, this front page stays blank on purpose.</p>
+    </section>
+  <% else %>
+    <section class="topics-section" aria-labelledby="topics-heading">
+      <h2 id="topics-heading">Top topics</h2>
+      <div class="topic-columns">
+        <% @digest.top_topics.each_with_index do |topic, index| %>
+          <section class="topic-column" aria-labelledby="topic-<%= index %>">
+            <h3 id="topic-<%= index %>">
+              <span class="topic-name"><%= topic.name %></span>
+              <span class="topic-count"><%= pluralize(topic.count, "headline") %></span>
+            </h3>
+            <ul class="headline-list">
+              <% topic.articles.each do |article| %>
+                <li>
+                  <span class="headline"><%= article.title %></span>
+                  <span class="byline"><%= [article.publisher, article.year.presence || "undated"].reject(&:blank?).join(" · ") %></span>
+                </li>
+              <% end %>
+            </ul>
+          </section>
+        <% end %>
+      </div>
+
+      <% if @digest.brief_topics.any? %>
+        <div class="briefs">
+          <h3 class="briefs-heading">Briefs</h3>
+          <ul class="brief-list">
+            <% @digest.brief_topics.each do |topic| %>
+              <li class="brief">
+                <span class="brief-name"><%= topic.name %></span>
+                <span class="brief-count"><%= pluralize(topic.count, "headline") %></span>
+              </li>
+            <% end %>
+          </ul>
+        </div>
+      <% end %>
+    </section>
+
+    <% if @digest.untagged_articles.any? %>
+      <section class="catch-all-section" id="catch-all" aria-labelledby="catch-all-heading">
+        <h2 id="catch-all-heading">Unsorted</h2>
+        <p class="section-note">Filed without a topic, printed anyway.</p>
+        <ul class="headline-list headline-list-wide">
+          <% @digest.untagged_articles.each do |article| %>
+            <li>
+              <span class="headline"><%= article.title %></span>
+              <span class="byline"><%= [article.publisher, article.year.presence || "undated"].reject(&:blank?).join(" · ") %></span>
+            </li>
+          <% end %>
+        </ul>
+      </section>
+    <% end %>
+
+    <section class="depth-section" aria-labelledby="depth-heading">
+      <h2 id="depth-heading">Technical depth</h2>
+      <div class="depth-bar" aria-hidden="true">
+        <% @digest.depth_rows.each_with_index do |row, index| %>
+          <span class="depth-segment depth-segment-<%= index % 5 %>" style="--depth-weight: <%= row.count %>"></span>
+        <% end %>
+      </div>
+      <ol class="depth-list">
+        <% @digest.depth_rows.each_with_index do |row, index| %>
+          <li>
+            <span class="depth-swatch depth-segment-<%= index % 5 %>" aria-hidden="true"></span>
+            <strong><%= row.name %></strong>
+            <span class="depth-figure"><%= row.count %> (<%= row.percent %>%)</span>
+          </li>
+        <% end %>
+      </ol>
+      <p class="section-note"><%= pluralize(@digest.article_count, "article") %> in this edition, every one measured.</p>
+    </section>
+
+    <section class="publisher-section" aria-labelledby="publishers-heading">
+      <h2 id="publishers-heading">Publishers</h2>
+      <div class="publisher-columns">
+        <div class="publisher-named">
+          <h3>More than one headline</h3>
+          <ul class="named-publishers">
+            <% @digest.named_publishers.each do |publisher| %>
+              <li>
+                <span class="publisher-name"><%= publisher.name %></span>
+                <span class="publisher-count"><%= publisher.count %></span>
+              </li>
+            <% end %>
+          </ul>
+        </div>
+        <div class="publisher-tail">
+          <h3>The long tail</h3>
+          <p class="publisher-tail-summary">
+            <%= @digest.tail_size %> <%= @digest.tail_size == 1 ? "publisher appears" : "publishers appear" %> exactly once
+          </p>
+          <ul class="dot-grid" aria-hidden="true">
+            <% @digest.publisher_rows.each do |publisher| %>
+              <li class="publisher-dot <%= publisher.count > 1 ? "publisher-dot-repeat" : "publisher-dot-single" %>"></li>
+            <% end %>
+          </ul>
+          <p class="dot-legend">
+            <span class="legend-swatch legend-repeat" aria-hidden="true"></span> more than one headline
+            <span class="legend-swatch legend-single" aria-hidden="true"></span> exactly one
+            (<%= @digest.publisher_count %> publishers plotted)
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="dateline-section" aria-labelledby="dateline-heading">
+      <h2 id="dateline-heading">From the morgue</h2>
+      <% if @digest.oldest_article %>
+        <p class="dateline">
+          Oldest item on file:
+          <strong><%= @digest.oldest_article.title %></strong>,
+          first published <time datetime="<%= @digest.oldest_published_date %>"><%= @digest.oldest_published_date %></time>
+          <% if @digest.oldest_article.publisher.present? %>by <%= @digest.oldest_article.publisher %><% end %>.
+        </p>
+        <p class="section-note">
+          The newest item is <strong><%= @digest.newest_article.title %></strong>,
+          published <time datetime="<%= @digest.newest_published_date %>"><%= @digest.newest_published_date %></time>.
+        </p>
+      <% end %>
+    </section>
+
+    <footer class="provenance">
+      <h2>Provenance</h2>
+      <p>
+        Source: <%= @digest.source_names.presence&.to_sentence || "unknown" %> ·
+        <%= pluralize(@digest.article_count, "article") %> ·
+        imported
+        <% if @digest.first_imported_at && @digest.last_imported_at %>
+          between <time datetime="<%= @digest.first_imported_at.iso8601 %>"><%= @digest.first_imported_at.utc.strftime("%Y-%m-%d %H:%M UTC") %></time>
+          and <time datetime="<%= @digest.last_imported_at.iso8601 %>"><%= @digest.last_imported_at.utc.strftime("%Y-%m-%d %H:%M UTC") %></time>
+        <% else %>
+          at an unknown time
+        <% end %>.
+      </p>
+    </footer>
+  <% end %>
+</main>

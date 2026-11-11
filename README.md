@@ -48,6 +48,11 @@ Auto-pull toggle, and polls the Turbo stream that announces new archive
 versions. When a new version arrives while the page is scrolled or focused, the
 dashboard offers **New articles available** instead of yanking the view.
 
+The same archive also prints a front page at `/infographic`: a server-rendered
+broadsheet with topic columns, the technical-depth mix, the publisher long tail,
+and the oldest item on file. Every figure is in the HTML, so the page is
+complete with JavaScript disabled.
+
 ### Automated Hacker News batch
 
 The Ruby worker combines Hacker News intake, public article fetches, publisher
@@ -134,6 +139,7 @@ database:
 
 ```powershell
 bundle exec ruby test/integration/dashboard_test.rb
+bundle exec ruby test/integration/infographic_test.rb
 bundle exec ruby test/integration/ingestion_test.rb
 bundle exec ruby test/integration/auto_pull_test.rb
 bundle exec ruby test/integration/auto_pull_budget_test.rb
