@@ -11,13 +11,14 @@ class IngestBatch
   MAX_REASON = 300
 
   def initialize(hn: HackerNewsClient.new, fetcher: SafeFetcher.new, summarizer:,
-    extractor: ArticleExtractor.new, now: -> { Time.now.utc }, secrets: [])
+    extractor: ArticleExtractor.new, now: -> { Time.now.utc }, secrets: [], meter: nil)
     @hn = hn
     @fetcher = fetcher
     @summarizer = summarizer
     @extractor = extractor
     @now = now
     @secrets = secrets
+    @meter = meter
   end
 
   def run(feed: "new", limit: 10, archive_rows: [], retry_entries: [])
@@ -54,10 +55,18 @@ class IngestBatch
     failures = []
     produced = []
     model_calls = 0
+    budget_stopped = false
 
     candidates.each_value do |candidate|
       story = candidate[:story]
       key = UrlKey.call(story["url"])
+
+      # Ask before each story that needs a summary, so a run stops cleanly at
+      # the cap and leaves the rest of the list for the next day.
+      if candidate[:record].nil? && @meter&.exhausted?
+        budget_stopped = true
+        break
+      end
 
       if candidate[:record]
         if archive_urls.include?(key) || produced.include?(key)
@@ -95,6 +104,7 @@ class IngestBatch
         summary = @summarizer.summarize(
           url: final_url, title: title, publisher: publisher, text: extracted[:text]
         )
+        @meter&.record(summaries: 1, cost_usd: summary["cost_usd"].to_f)
         record = valid_record(
           "url" => final_url,
           "title" => title,
@@ -122,7 +132,8 @@ class IngestBatch
       end
     end
 
-    { records: records, failures: failures, skipped_archived: skipped, model_calls: model_calls }
+    { records: records, failures: failures, skipped_archived: skipped,
+      model_calls: model_calls, budget_stopped: budget_stopped }
   end
 
   def valid_record(record)

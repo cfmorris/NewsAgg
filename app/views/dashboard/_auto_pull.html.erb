@@ -5,7 +5,9 @@
   </label>
   <% state = auto_pull_worker_state %>
   <small id="auto-pull-status" class="auto-pull-status<%= " auto-pull-status-error" if state[:last_error] %>" role="status">
-    <% if state[:last_error] %>
+    <% if (pause = auto_pull_pause_text(state)) %>
+      <%= pause %>
+    <% elsif state[:last_error] %>
       Last pull failed: <%= state[:last_error] %>
     <% elsif state[:last_run_at] %>
       Last pull <%= auto_pull_last_run_text %>

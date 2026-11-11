@@ -11,6 +11,14 @@ class DeepseekSummarizer
 
   DEPTHS = ["Overview", "Technical analysis", "Deep dive"].freeze
 
+  # DeepSeek list prices, in US dollars per million tokens. Cache reads bill at
+  # their own rate, so a usage block is priced exactly instead of estimated from
+  # the article length.
+  INPUT_USD_PER_MILLION = 0.27
+  OUTPUT_USD_PER_MILLION = 1.10
+  CACHE_HIT_USD_PER_MILLION = 0.07
+  TOKENS_PER_MILLION = 1_000_000.0
+
   def initialize(env: ENV, http: HttpClient.new, topics: Taxonomy.load)
     @env = env
     @http = http
@@ -58,7 +66,9 @@ class DeepseekSummarizer
     topics = Array(parsed["topics"]).filter_map { |value| @allowed[value.to_s.strip.downcase] }.uniq.first(5)
     raise SummaryError, "Summary provider returned no known topics." if topics.empty?
 
-    { "summary" => summary, "depth" => depth, "topics" => topics }
+    usage = usage_for(parsed)
+    { "summary" => summary, "depth" => depth, "topics" => topics,
+      "usage" => usage, "cost_usd" => usage["cost_usd"] }
   end
 
   private
@@ -105,13 +115,39 @@ class DeepseekSummarizer
     content = parsed.dig("choices", 0, "message", "content")
     raise SummaryError, "Summary provider returned no content." unless content.is_a?(String)
 
-    text = content.strip.sub(/\A```(?:json)?\s*/i, "").sub(/```\z/, "")
-    data = JSON.parse(text)
+    data = JSON.parse(extract_json(content))
     raise SummaryError, "Summary provider returned invalid JSON." unless data.is_a?(Hash)
 
+    # Keep the provider's usage block so the caller can price the call exactly.
+    data["usage"] = parsed["usage"] if parsed["usage"].is_a?(Hash)
     data
   rescue JSON::ParserError
     raise SummaryError, "Summary provider returned non-JSON content."
+  end
+
+  # Prices the provider's usage block. A response without one costs 0.0 here:
+  # the cost is never guessed from the article or the prompt text.
+  def usage_for(parsed)
+    raw = parsed["usage"].is_a?(Hash) ? parsed["usage"] : {}
+    prompt_tokens = raw["prompt_tokens"].to_i
+    completion_tokens = raw["completion_tokens"].to_i
+    cache_hit_tokens = raw["prompt_cache_hit_tokens"].to_i
+
+    billable_input = [prompt_tokens - cache_hit_tokens, 0].max
+    cost_usd = (billable_input * INPUT_USD_PER_MILLION +
+      cache_hit_tokens * CACHE_HIT_USD_PER_MILLION +
+      completion_tokens * OUTPUT_USD_PER_MILLION) / TOKENS_PER_MILLION
+
+    {
+      "prompt_tokens" => prompt_tokens,
+      "completion_tokens" => completion_tokens,
+      "prompt_cache_hit_tokens" => cache_hit_tokens,
+      "cost_usd" => cost_usd.round(10)
+    }
+  end
+
+  def extract_json(content)
+    content.strip.sub(/\A```(?:json)?\s*/i, "").sub(/```\z/, "")
   end
 
   def canonical_depth(value)
