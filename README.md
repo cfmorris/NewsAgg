@@ -3,8 +3,8 @@
 Rails owns the dashboard: controllers and views render the archive, filter it, and
 compute every article and topic count on the server. Turbo keeps the page current.
 Ruby services own Hacker News intake, article fetching, DeepSeek summarization,
-retries, and Neo4j imports; a Rails-backed worker process runs them. No Node.js
-installation is required.
+retries, and Neo4j imports; the Rails web process itself runs them on a schedule,
+so no separate worker process is needed. No Node.js installation is required.
 
 ## Run locally
 
@@ -59,12 +59,17 @@ $env:DEEPSEEK_API_KEY = Read-Host 'DeepSeek API key' -MaskInput
 ruby bin/ingest-hn --limit 10 --retry-file tmp/hn-retry.json
 ```
 
-For automatic updates, run `ruby bin/ingest-hn --watch` in a separate terminal
-with the same provider and Neo4j settings. Keep Rails and the worker running
-from the same checkout. Auto-pull starts off. Turn it on beside **Date added**
-to let the worker run a batch at its next 60-second check. Turn it off to skip
-future batches. Any batch already running finishes. Press Ctrl+C to stop the
-worker.
+Auto-pull runs inside the web process, so `bundle exec puma -b tcp://127.0.0.1:3000`
+is the only process to start. Auto-pull starts off. Turn it on beside **Date
+added** and the server pulls a batch immediately, then every 60 seconds, until
+you turn it off; a batch already running finishes, and the dashboard shows the
+last pull time and any error beside the toggle. The setting lives in
+`tmp/auto-pull.enabled`, so it survives a restart. A pid lock at
+`tmp/auto-pull-worker.lock` stops a second web process on the same checkout from
+pulling alongside the first.
+
+The supervisor boots from `config.ru`, so `rails runner` and the console never
+start a puller. Set `NEWSAGG_AUTO_PULL=0` to keep the web process from pulling.
 
 Set `DEEPSEEK_BASE_URL` and `DEEPSEEK_MODEL` to override the provider defaults.
 Use `--feed top` or `--feed best` to change the Hacker News feed, `--dry-run` to
@@ -90,13 +95,17 @@ database:
 ```powershell
 bundle exec ruby test/integration/dashboard_test.rb
 bundle exec ruby test/integration/ingestion_test.rb
+bundle exec ruby test/integration/auto_pull_test.rb
 ```
 
 The first exercises Rails rendering, server-side filtering and counts, the Turbo
 stream ETag, and the Auto-pull endpoint. The second runs the Ruby ingestion
 pipeline against recorded Hacker News and article fixtures, a fake DeepSeek
 endpoint, and a disposable in-memory archive, including retry handling and secret
-redaction.
+redaction. The third drives the in-process Auto-pull supervisor with a fake
+ingestion runner and a short interval: immediate pull on enable, the next tick,
+stopping on disable, skipping an in-flight trigger, the `/auto-pull` payload, and
+the single-process pid lock.
 
 The repeat-import integration test needs a throwaway Neo4j server. The wrapper
 downloads pinned Neo4j Community 5.26.0 and, when Java 21 is not available, a

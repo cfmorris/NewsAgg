@@ -3,6 +3,8 @@ require "fileutils"
 require "json"
 
 require_relative "../services/archive"
+require_relative "../services/auto_pull"
+require_relative "../services/auto_pull_supervisor"
 require_relative "../services/dashboard_filter"
 
 class DashboardController < ActionController::Base
@@ -16,7 +18,7 @@ class DashboardController < ActionController::Base
   end
 
   def auto_pull
-    render json: { enabled: auto_pull_flag.file? }
+    render json: { enabled: AutoPull.enabled?, worker: AutoPull.worker_state }
   end
 
   def update_auto_pull
@@ -29,10 +31,11 @@ class DashboardController < ActionController::Base
     enabled = enabled == true || enabled == "true"
 
     if enabled
-      FileUtils.mkdir_p(auto_pull_flag.dirname)
-      FileUtils.touch(auto_pull_flag)
+      FileUtils.mkdir_p(File.dirname(AutoPull.flag_path))
+      FileUtils.touch(AutoPull.flag_path)
+      AutoPull.supervisor&.trigger
     else
-      FileUtils.rm_f(auto_pull_flag)
+      FileUtils.rm_f(AutoPull.flag_path)
     end
     auto_pull
   end
@@ -90,9 +93,5 @@ class DashboardController < ActionController::Base
   def archive
     factory = Rails.application.config.x.archive_factory
     factory&.call || Archive.new
-  end
-
-  def auto_pull_flag
-    Rails.root.join("tmp/auto-pull.enabled")
   end
 end

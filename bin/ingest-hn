@@ -4,20 +4,17 @@ require "optparse"
 require_relative "../config/environment"
 require_relative "../app/services/ingestion_runner"
 
-POLL_SECONDS = 60
 DEFAULT_RETRY = File.expand_path("../tmp/hn-retry.json", __dir__)
-AUTO_PULL_FLAG = File.expand_path("../tmp/auto-pull.enabled", __dir__)
 
-options = { feed: "new", limit: 10, retry_path: DEFAULT_RETRY, dry_run: false, watch: false }
+options = { feed: "new", limit: 10, retry_path: DEFAULT_RETRY, dry_run: false }
 
 parser = OptionParser.new do |opts|
   opts.banner = "Usage: ruby bin/ingest-hn [--feed new|top|best] [--limit N] " \
-    "[--retry-file PATH] [--dry-run] [--watch]"
+    "[--retry-file PATH] [--dry-run]"
   opts.on("--feed FEED", %w[new top best], "Hacker News feed (default: new)") { |value| options[:feed] = value }
   opts.on("--limit N", Integer, "Maximum stories per batch (1-500)") { |value| options[:limit] = value }
   opts.on("--retry-file PATH", "Retry file (default: tmp/hn-retry.json)") { |value| options[:retry_path] = value }
   opts.on("--dry-run", "Print records without importing or writing retries") { options[:dry_run] = true }
-  opts.on("--watch", "Run a batch every 60 seconds while Auto-pull is enabled") { options[:watch] = true }
   opts.on("-h", "--help", "Show this help") do
     puts opts
     puts
@@ -59,15 +56,4 @@ rescue HttpClient::Error => error
   1
 end
 
-if options[:watch]
-  loop do
-    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-    if File.file?(AUTO_PULL_FLAG)
-      exit 2 if run_batch(options) == 2
-    end
-    elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
-    sleep([POLL_SECONDS - elapsed, 0].max)
-  end
-else
-  exit run_batch(options)
-end
+exit run_batch(options)
