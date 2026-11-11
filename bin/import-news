@@ -1,0 +1,39 @@
+#!/usr/bin/env ruby
+require "json"
+require_relative "../app/services/archive"
+
+records = JSON.parse($stdin.read)
+required = %w[url title summary depth publisher source external_id]
+abort "Expected an array of article records" unless records.is_a?(Array)
+records.each_with_index do |record, index|
+  valid = record.is_a?(Hash) &&
+    required.all? { |key| record[key].is_a?(String) && !record[key].strip.empty? } &&
+    record["topics"].is_a?(Array) && record["topics"].all? { |topic| topic.is_a?(String) && !topic.strip.empty? }
+  abort "Invalid article record at index #{index}" unless valid
+  published_date = record["published_date"]
+  if published_date && !(published_date.is_a?(String) &&
+    published_date.match?(/\A\d{4}-\d{2}-\d{2}\z/) &&
+    Date.valid_date?(*published_date.split("-").map(&:to_i)))
+    abort "Invalid published_date at index #{index}"
+  end
+  %w[url discovery_url].each do |key|
+    next if key == "discovery_url" && record[key].nil?
+    uri = URI.parse(record[key].to_s)
+    abort "Invalid #{key} at index #{index}" unless uri.is_a?(URI::HTTP) && uri.host && !uri.userinfo
+  rescue URI::InvalidURIError
+    abort "Invalid #{key} at index #{index}"
+  end
+end
+
+archive = Archive.new
+archive.prepare
+archive.seed_taxonomy
+fast_mappings = records.flat_map { |record| record.fetch("fast_mappings", []) }
+unless fast_mappings.all? { |entry| entry.is_a?(Hash) && entry["uri"].is_a?(String) &&
+  entry["uri"].match?(%r{\Ahttps?://id\.worldcat\.org/fast/[0-9]+\z}) &&
+  %w[topic label].all? { |key| entry[key].is_a?(String) && !entry[key].strip.empty? } }
+  abort "Invalid FAST mapping"
+end
+archive.map_fast_subjects(fast_mappings) unless fast_mappings.empty?
+records.each_slice(100) { |batch| archive.import(batch) }
+puts "Imported #{records.length} discovery records"

@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '4.0.9'
+          bundler-cache: true
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Check Ruby and JavaScript syntax
+        shell: pwsh
+        run: |
+          foreach ($file in @('bin/import-news', 'config.ru') + @(Get-ChildItem app,config -Filter *.rb -Recurse | ForEach-Object FullName)) {
+            ruby -c $file
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          }
+          node --check bin/fetch-hn.mjs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $html = Get-Content -Raw -Encoding UTF8 news-dashboard.html
+          $script = [regex]::Match($html, '(?s)<script>(.*?)</script>')
+          if (!$script.Success) { throw 'Dashboard script is missing' }
+          $script.Groups[1].Value | node --check
+      - name: Smoke test Rails routes
+        shell: pwsh
+        run: |
+          @'
+          require_relative "config/environment"
+          require "rack/mock"
+
+          request = Rack::MockRequest.new(Rails.application)
+          host = { "HTTP_HOST" => "127.0.0.1:3000" }
+          dashboard = request.get("/", host)
+          abort "Dashboard failed (#{dashboard.status})" unless dashboard.ok? &&
+            dashboard.body.include?("Technical Reading Room")
+
+          ENV.delete("NEO4J_PASSWORD")
+          archive = request.get("/articles", host)
+          abort "Expected HTTP 503 without Neo4j credentials, got #{archive.status}" unless archive.status == 503
+          '@ | bundle exec ruby

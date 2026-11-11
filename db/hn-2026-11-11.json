@@ -1,0 +1,61 @@
+[
+  {
+    "external_id": "50454128",
+    "title": "Odin’s October 2026 compiler update",
+    "url": "https://odin-lang.org/news/newsletter-2026-10/",
+    "publisher": "Odin Programming Language",
+    "topics": [
+      "Software Engineering",
+      "Compilers"
+    ],
+    "summary": "Odin’s October newsletter reports that the compiler now parallelizes semantic checking and reduces allocation when parsing integer literals. It also introduces array-backed bit sets and makes radlink the default Windows linker. The post points to the monthly release notes for the full list of compiler changes.",
+    "depth": "Technical analysis",
+    "source": "Hacker News",
+    "discovery_url": "https://news.ycombinator.com/item?id=50454128"
+  },
+  {
+    "external_id": "50454115",
+    "title": "Observability across 2,800 restaurant Kubernetes clusters",
+    "url": "https://medium.com/chick-fil-atech/observability-at-the-edge-b2385065ab6e",
+    "publisher": "Chick-fil-A Tech",
+    "topics": [
+      "Systems & Hardware",
+      "Kubernetes",
+      "Observability"
+    ],
+    "summary": "This resurfaced 2023 write-up describes observability for Chick-fil-A’s fleet of roughly 2,800 restaurant Kubernetes clusters. The engineering team uses Prometheus for application metrics and Vector to transform and route telemetry. Direct metrics help the team control bandwidth and cost when verbose log traffic competes with restaurant operations.",
+    "depth": "Technical analysis",
+    "source": "Hacker News",
+    "discovery_url": "https://news.ycombinator.com/item?id=50454115"
+  },
+  {
+    "external_id": "50454010",
+    "title": "The Dutch digital wallet’s platform dependencies",
+    "url": "https://developer.overheid.nl/blog/2026/11/11/nl-wallet",
+    "publisher": "developer.overheid.nl",
+    "topics": [
+      "Cybersecurity",
+      "Digital identity",
+      "Mobile platforms"
+    ],
+    "summary": "The NL Wallet team explains why its digital identity app currently depends on the Apple and Google ecosystems. Hardware-backed keys bind credentials to a phone, while app attestation gives the backend evidence that requests come from the authentic wallet. The team is examining how to obtain comparable guarantees on alternative platforms.",
+    "depth": "Technical analysis",
+    "source": "Hacker News",
+    "discovery_url": "https://news.ycombinator.com/item?id=50454010"
+  },
+  {
+    "external_id": "50453994",
+    "title": "Prefixwise traces prompt-cache misses",
+    "url": "https://github.com/tejachavali/prefixwise",
+    "publisher": "Prefixwise",
+    "topics": [
+      "AI & ML",
+      "Prompt caching",
+      "Observability"
+    ],
+    "summary": "Prefixwise records where an agent’s request changes and estimates the cost of avoidable prompt-cache misses. In one eight-request demonstration, it attributed two misses to tool ordering and reported that consistent ordering raised the share served from cache from 74.6% to 87.1%. The tool gives engineers a way to test whether a prompt change saves money on their own workload.",
+    "depth": "Technical analysis",
+    "source": "Hacker News",
+    "discovery_url": "https://news.ycombinator.com/item?id=50453994"
+  }
+]

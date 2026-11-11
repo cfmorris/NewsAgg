@@ -1,0 +1,74 @@
+[
+  {
+    "title": "A smaller edit stops a reasoning model from looping",
+    "publisher": "Nathan Barry",
+    "depth": "Deep dive",
+    "topics": [
+      "AI & ML",
+      "Model interpretability"
+    ],
+    "url": "https://nathan.rs/posts/weight-space-lp/",
+    "summary": "Nathan Barry used linear programming to find a sparse weight edit that reduces repetitive reasoning loops in Qwen3.5-0.8B. The edit changed about 16,000 weights versus 130,000 for an earlier agent-designed edit and scored 51.7% versus 50.9% on MATH-500 in Barry’s comparison. A fixed activation-steering vector recovered most of the gain, and the study covered one model and one failure mode.",
+    "source": "Hacker News",
+    "external_id": "50452655",
+    "discovery_url": "https://news.ycombinator.com/item?id=50452655"
+  },
+  {
+    "title": "A Transformer teaches a Mamba model",
+    "publisher": "Apple Machine Learning Research",
+    "depth": "Deep dive",
+    "topics": [
+      "AI & ML",
+      "Model distillation"
+    ],
+    "url": "https://machinelearning.apple.com/research/attention-mamba-distillation",
+    "summary": "Apple researchers transferred knowledge from a pretrained Transformer to a Mamba model through an intermediate model with linearized attention. The resulting model uses no attention blocks and reached a perplexity of 14.01, close to the Pythia-1B teacher’s 13.86. The remaining gaps were more pronounced on tasks that require recalling information from the prompt.",
+    "source": "Hacker News",
+    "external_id": "50453171",
+    "discovery_url": "https://news.ycombinator.com/item?id=50453171"
+  },
+  {
+    "title": "Ginux moves its Linux compatibility layer into userspace",
+    "publisher": "Ginux",
+    "depth": "Technical analysis",
+    "topics": [
+      "Systems & Hardware",
+      "Cybersecurity",
+      "Sandboxing"
+    ],
+    "url": "https://github.com/gmkurtzer/ginux",
+    "summary": "Ginux runs as a Linux process that intercepts system calls from managed programs and emulates, mediates, or denies them according to a versioned configuration. The project reports that a pinned Rocky Linux 10 instance can boot to multi-user mode, accept a console login, install updates, and shut down cleanly. Its effectiveness as a containment boundary for AI agents remains under test.",
+    "source": "Hacker News",
+    "external_id": "50450007",
+    "discovery_url": "https://news.ycombinator.com/item?id=50450007"
+  },
+  {
+    "title": "An agent that can resume after a crash",
+    "publisher": "martinfowler.com",
+    "depth": "Deep dive",
+    "topics": [
+      "Software Engineering",
+      "AI & ML",
+      "Durable execution"
+    ],
+    "url": "https://martinfowler.com/articles/durable-execution-agents.html",
+    "summary": "A stock-replenishment prototype uses durable execution to preserve an agent’s progress while it waits for human approval. The workflow records model decisions and tool results, then replays the log after a crash to rebuild state without repeating completed steps. External writes still need stable idempotency keys to prevent duplicate purchase orders.",
+    "source": "Hacker News",
+    "external_id": "50453162",
+    "discovery_url": "https://news.ycombinator.com/item?id=50453162"
+  },
+  {
+    "title": "Relighting a photograph with editable 3D lights",
+    "publisher": "Yağız Aksoy",
+    "depth": "Deep dive",
+    "topics": [
+      "Computer Graphics",
+      "AI & ML"
+    ],
+    "url": "https://yaksoy.github.io/PhysicalRelighting/",
+    "summary": "This resurfaced SIGGRAPH 2025 paper lets users add point lights, spotlights, or environmental illumination to a single photograph. The system estimates a 3D mesh, path-traces the new lighting, and uses a neural renderer to produce the final image. The initial render depends on geometry inferred from just one view.",
+    "source": "Hacker News",
+    "external_id": "50452224",
+    "discovery_url": "https://news.ycombinator.com/item?id=50452224"
+  }
+]
