@@ -71,6 +71,46 @@ pulling alongside the first.
 The supervisor boots from `config.ru`, so `rails runner` and the console never
 start a puller. Set `NEWSAGG_AUTO_PULL=0` to keep the web process from pulling.
 
+#### Daily budget and the Neo4j breaker
+
+Auto-pull keeps its policy state in `tmp/auto-pull.state.json`: the current day,
+spend in dollars, summaries written, consecutive failures, and the instant a
+cooldown expires. The file is written atomically, survives a restart, and rolls
+its counters at local midnight. The sheet is meant to be read, not hand-edited:
+
+```powershell
+Get-Content tmp/auto-pull.state.json
+```
+
+A pull starts only when `AutoPull::Policy` allows it, and every skip is reported
+through `GET /auto-pull` as `worker.reason` (`ok`, `budget`, `backoff`,
+`config`) with `worker.retry_at`, so the dashboard can say "Paused: daily
+budget reached" or "Paused: Neo4j unreachable, retrying 17:42".
+
+- **Summary cap.** `NEWSAGG_EXPECTED_DAILY_STORIES` (default 90) is the expected
+  number of new, non-archived stories summarized per day. The hard cap is twice
+  that — 180 summaries by default — and `NEWSAGG_DAILY_BUDGET_USD` (default
+  0.10) is the secondary hard stop in dollars. Whichever trips first wins.
+  Remaining budget is checked before every story summary, so a run stops
+  cleanly mid-list and the rest waits for the next day; a truncated run is not a
+  failure.
+- **Exact metering.** The summarizer prices DeepSeek's `usage` block
+  (`prompt_tokens`, `prompt_cache_hit_tokens`, `completion_tokens`) with the
+  input, output, and cache-read rates in `DeepseekSummarizer`. Cost is never
+  estimated from article length.
+- **Recalibrate the cap.** The default 2x90 is a starting guess. Read
+  `summaries` from the state file each day, take the observed daily median, and
+  set `NEWSAGG_EXPECTED_DAILY_STORIES` to that median (the cap is then 2x it).
+- **Neo4j breaker.** Missing `NEO4J_PASSWORD`/`NEO4J_HTTP_URL`, HTTP 401/403, or
+  an invalid Cypher statement latches the puller off (`config`) until the web
+  process restarts or those env values change, so a typo cannot burn a request
+  every minute. Refused connections, timeouts, 5xx responses, and Hacker News
+  429/network errors back off for 60 seconds, then 5, 15, and 30 minutes
+  (honoring `Retry-After` when the server sends it), then one half-open probe.
+  A batch that completes with zero new stories counts as success. The breaker
+  never touches `tmp/hn-retry.json`: failed stories keep waiting there and the
+  file stops growing while the breaker is open.
+
 Set `DEEPSEEK_BASE_URL` and `DEEPSEEK_MODEL` to override the provider defaults.
 Use `--feed top` or `--feed best` to change the Hacker News feed, `--dry-run` to
 print records without writing Neo4j or the retry file, and `--limit` to bound a
@@ -96,6 +136,7 @@ database:
 bundle exec ruby test/integration/dashboard_test.rb
 bundle exec ruby test/integration/ingestion_test.rb
 bundle exec ruby test/integration/auto_pull_test.rb
+bundle exec ruby test/integration/auto_pull_budget_test.rb
 ```
 
 The first exercises Rails rendering, server-side filtering and counts, the Turbo
@@ -105,7 +146,11 @@ endpoint, and a disposable in-memory archive, including retry handling and secre
 redaction. The third drives the in-process Auto-pull supervisor with a fake
 ingestion runner and a short interval: immediate pull on enable, the next tick,
 stopping on disable, skipping an in-flight trigger, the `/auto-pull` payload, and
-the single-process pid lock.
+the single-process pid lock. The fourth pins the budget and breaker behavior
+with an injected clock and fake runner: the summary and dollar caps stopping a
+run mid-list, the local-day rollover, the `:config` latch, the 60s → 5m → 15m →
+30m backoff with a half-open probe, zero-new-story success, exact usage pricing,
+and the policy state surviving a restart.
 
 The repeat-import integration test needs a throwaway Neo4j server. The wrapper
 downloads pinned Neo4j Community 5.26.0 and, when Java 21 is not available, a

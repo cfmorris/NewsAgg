@@ -29,11 +29,24 @@
     return await response.json();
   }
 
+  function autoPullPauseText(worker) {
+    var retryAt = worker.retry_at;
+    var retryText = retryAt ? new Date(retryAt) : null;
+    if (worker.reason === "budget") return "Paused: daily budget reached";
+    if (worker.reason === "config") return "Paused: check the Neo4j configuration";
+    if (worker.reason === "backoff") {
+      if (!retryText || isNaN(retryText.getTime())) return "Paused: Neo4j unreachable, retrying";
+      return "Paused: Neo4j unreachable, retrying " + retryText.toLocaleTimeString();
+    }
+    return null;
+  }
+
   function renderAutoPull(payload) {
     var status = document.getElementById("auto-pull-status");
     if (!status || !payload) return;
     var worker = payload.worker || {};
     var failed = Boolean(worker.last_error);
+    var paused = worker.running ? autoPullPauseText(worker) : null;
     var text;
     if (failed) {
       text = "Last pull failed: " + worker.last_error;
@@ -41,6 +54,8 @@
       text = "Auto-pull needs the Rails web process running.";
     } else if (worker.in_flight) {
       text = "Pulling now…";
+    } else if (paused) {
+      text = paused;
     } else if (worker.last_run_at) {
       var when = new Date(worker.last_run_at);
       text = "Last pull " + (isNaN(when.getTime()) ? worker.last_run_at : when.toLocaleString());

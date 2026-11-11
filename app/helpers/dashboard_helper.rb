@@ -32,4 +32,22 @@ module DashboardHelper
   rescue ArgumentError
     timestamp.to_s
   end
+
+  # Why the next pull is on hold, in the dashboard's own words, or nil when the
+  # puller is free to run.
+  def auto_pull_pause_text(state = auto_pull_worker_state)
+    case state[:reason].to_s
+    when "budget"
+      "Paused: daily budget reached"
+    when "backoff"
+      retry_at = state[:retry_at]
+      return "Paused: Neo4j unreachable, retrying" if retry_at.nil? || retry_at.to_s.empty?
+
+      "Paused: Neo4j unreachable, retrying #{Time.iso8601(retry_at.to_s).getlocal.strftime("%H:%M")}"
+    when "config"
+      "Paused: check the Neo4j configuration"
+    end
+  rescue ArgumentError
+    "Paused: Neo4j unreachable, retrying soon"
+  end
 end

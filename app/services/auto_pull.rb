@@ -5,6 +5,7 @@ require_relative "ingestion_runner"
 module AutoPull
   FLAG_NAME = "auto-pull.enabled"
   LOCK_NAME = "auto-pull-worker.lock"
+  STATE_NAME = "auto-pull.state.json"
   FEED = "new"
   LIMIT = 10
 
@@ -20,6 +21,10 @@ module AutoPull
 
   def lock_path
     config.auto_pull_lock_path || Rails.root.join("tmp", LOCK_NAME)
+  end
+
+  def state_path
+    config.auto_pull_state_path || Rails.root.join("tmp", STATE_NAME)
   end
 
   def enabled?
@@ -47,7 +52,8 @@ module AutoPull
 
     supervisor = AutoPullSupervisor.new(
       runner: runner || ingest_runner(root: root, env: env),
-      flag_path: flag_path, lock_path: lock_path,
+      flag_path: flag_path, lock_path: lock_path, state_path: state_path,
+      budget: AutoPull::Budget.from_env(env),
       interval: interval || AutoPullSupervisor::DEFAULT_INTERVAL, err: err
     )
     supervisor.start
@@ -57,7 +63,14 @@ module AutoPull
     nil
   end
 
+  # One pull, metered so the batch can stop mid-list at the day's cap.
   def ingest_runner(root: Rails.root, env: ENV)
-    -> { IngestionRunner.new(retry_path: root.join("tmp/hn-retry.json"), env: env).run(feed: FEED, limit: LIMIT) }
+    lambda do |meter|
+      runner = IngestionRunner.new(
+        retry_path: root.join("tmp/hn-retry.json"), env: env, meter: meter
+      )
+      runner.run(feed: FEED, limit: LIMIT)
+      runner.last_result
+    end
   end
 end

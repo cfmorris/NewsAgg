@@ -1,10 +1,20 @@
 require "json"
 require "net/http"
+require "time"
 require "uri"
 
 # Small JSON HTTP client used by the Hacker News and DeepSeek services.
 class HttpClient
-  class Error < StandardError; end
+  # retry_after carries the server's Retry-After seconds when it sent one, so a
+  # 429 or 503 can push the breaker past the default cooldown.
+  class Error < StandardError
+    attr_reader :retry_after
+
+    def initialize(message, retry_after: nil)
+      super(message)
+      @retry_after = retry_after
+    end
+  end
 
   def get_json(url, timeout: 10)
     body = get(url, timeout: timeout)
@@ -22,7 +32,7 @@ class HttpClient
 
     response = start(uri, timeout).start { |http| http.request(request) }
     unless response.is_a?(Net::HTTPSuccess)
-      raise Error, "#{url} returned HTTP #{response.code}"
+      raise Error.new("#{url} returned HTTP #{response.code}", retry_after: retry_after_seconds(response))
     end
     response.body
   rescue SocketError, SystemCallError, IOError, Net::OpenTimeout, Net::ReadTimeout => error
@@ -36,11 +46,23 @@ class HttpClient
     request = Net::HTTP::Get.new(uri.request_uri)
     request["accept"] = "application/json"
     response = start(uri, timeout).start { |http| http.request(request) }
-    raise Error, "#{url} returned HTTP #{response.code}" unless response.is_a?(Net::HTTPSuccess)
+    unless response.is_a?(Net::HTTPSuccess)
+      raise Error.new("#{url} returned HTTP #{response.code}", retry_after: retry_after_seconds(response))
+    end
 
     response.body
   rescue SocketError, SystemCallError, IOError, Net::OpenTimeout, Net::ReadTimeout => error
     raise Error, error.message
+  end
+
+  def retry_after_seconds(response)
+    value = response["retry-after"].to_s.strip
+    return nil if value.empty?
+    return value.to_i if value.match?(/\A\d+\z/)
+
+    [(Time.httpdate(value) - Time.now).ceil, 0].max
+  rescue ArgumentError
+    nil
   end
 
   def start(uri, timeout)
