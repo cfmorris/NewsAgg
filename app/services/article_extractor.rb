@@ -31,7 +31,8 @@ class ArticleExtractor
   end
 
   def clean_text(value, limit = MAX_TEXT)
-    text = decode_entities(value)
+    text = normalize_text(value)
+    text = decode_entities(text)
     3.times { text = text.gsub(/<[^>]*>/, " ") if text.include?("<") }
     text = text.gsub(UNSAFE_CHARS, " ").gsub(/[<>]/, " ")
     text = text.gsub(/\s+/, " ").strip
@@ -48,7 +49,7 @@ class ArticleExtractor
   end
 
   def extract(html, url, content_type: "text/html")
-    source = String(html)
+    source = normalize_text(html)
     uri = url.is_a?(URI) ? url : URI.parse(url.to_s)
     fallback_publisher = uri.hostname.to_s.sub(/\Awww\./i, "")
 
@@ -90,6 +91,19 @@ class ArticleExtractor
   end
 
   private
+
+  # Net::HTTP tags response bodies ASCII-8BIT and pages occasionally carry stray
+  # invalid bytes. Everything downstream matches UTF-8 regexps, so convert once
+  # here: binary is assumed UTF-8, invalid bytes are replaced (not dropped), and
+  # valid UTF-8 passes through untouched.
+  def normalize_text(value)
+    text = String(value)
+    text = text.dup.force_encoding(Encoding::UTF_8) if text.encoding == Encoding::ASCII_8BIT
+    text = text.encode(Encoding::UTF_8, invalid: :replace, undef: :replace) unless text.encoding == Encoding::UTF_8
+    text.valid_encoding? ? text : text.scrub
+  rescue EncodingError, ArgumentError
+    text.dup.force_encoding(Encoding::UTF_8).scrub
+  end
 
   def code_point(value)
     number = value.to_i
