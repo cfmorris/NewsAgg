@@ -17,6 +17,24 @@ def article(overrides)
   }.merge(overrides)
 end
 
+def relative_luminance(hex)
+  channels = hex.delete_prefix("#").scan(/../).map { |value| value.to_i(16) / 255.0 }
+  linear = channels.map { |value| value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055)**2.4 }
+  (0.2126 * linear[0]) + (0.7152 * linear[1]) + (0.0722 * linear[2])
+end
+
+def contrast_ratio(foreground, background)
+  high, low = [relative_luminance(foreground), relative_luminance(background)].sort.reverse
+  (high + 0.05) / (low + 0.05)
+end
+
+def css_color(css, name)
+  value = css[/--#{Regexp.escape(name)}:\s*(#[0-9a-fA-F]{6})/, 1]
+  raise "missing --#{name} in the dashboard stylesheet" unless value
+
+  value
+end
+
 rows = [
   article(
     "title" => "Rails renders the dashboard",
@@ -47,11 +65,21 @@ rows = [
   )
 ]
 
-Rails.application.config.x.archive_factory = -> { FakeArchive.new(rows) }
 request = Rack::MockRequest.new(Rails.application)
 host = { "HTTP_HOST" => "127.0.0.1:3000" }
 
 TestReport.run do
+  check "the dashboard renders without an archive factory" do
+    password = ENV.delete("NEO4J_PASSWORD")
+    response = request.get("/", host)
+    assert(response.ok?, "expected HTTP 200, got #{response.status}")
+    assert(response.body.include?("Could not load Neo4j"), "archive error missing")
+  ensure
+    ENV["NEO4J_PASSWORD"] = password
+  end
+
+  Rails.application.config.x.archive_factory = -> { FakeArchive.new(rows) }
+
   check "the dashboard renders server-side counts and articles" do
     response = request.get("/", host)
     assert(response.ok?, "expected HTTP 200, got #{response.status}")
@@ -99,6 +127,37 @@ TestReport.run do
     response = request.get("/?q=nothing-matches-this", host)
     assert(response.body.include?("0 articles"), "expected a zero count")
     assert(response.body.include?("No articles match these filters."), "empty-state message missing")
+    assert(response.body.include?('class="empty-state"'), "empty state is not styled")
+    assert(response.body.include?("Clear filters"), "empty state offers no way back")
+  end
+
+  check "the dashboard ships one permanent night theme" do
+    response = request.get("/", host)
+    assert(response.body.include?('data-theme="night"'), "night theme marker missing")
+    assert(response.body.include?('href="/dashboard.css"'), "night stylesheet link missing")
+    assert(response.body.include?('name="color-scheme" content="dark"'), "dark color-scheme hint missing")
+    assert(!response.body.match?(/theme[-\s]?toggle|light[-\s]?theme/i), "found a theme toggle")
+  end
+
+  check "the stylesheet is served as a dark CSS document" do
+    response = request.get("/dashboard.css", host)
+    assert(response.ok?, "expected HTTP 200, got #{response.status}")
+    assert(response["content-type"].to_s.include?("text/css"), "expected a CSS content type")
+    assert(response.body.include?("color-scheme: dark"), "expected a dark color scheme")
+    assert(response.body.include?(":focus-visible"), "keyboard focus styles missing")
+    assert(response.body.include?("turbo-frame[busy]"), "loading state styles missing")
+  end
+
+  check "the night palette keeps text, controls and focus readable" do
+    css = request.get("/dashboard.css", host).body
+    surface = css_color(css, "surface")
+    assert(contrast_ratio(css_color(css, "text"), surface) >= 7, "body text contrast too low")
+    assert(contrast_ratio(css_color(css, "text-muted"), surface) >= 4.5, "muted text contrast too low")
+    assert(contrast_ratio(css_color(css, "accent"), surface) >= 4.5, "link contrast too low")
+    assert(contrast_ratio(css_color(css, "on-accent"), css_color(css, "accent-fill")) >= 4.5,
+      "button label contrast too low")
+    assert(contrast_ratio(css_color(css, "focus"), surface) >= 3, "focus ring contrast too low")
+    assert(contrast_ratio(css_color(css, "border-control"), surface) >= 3, "control border contrast too low")
   end
 
   check "the Turbo stream publishes an archive version and honors ETags" do
@@ -137,6 +196,8 @@ TestReport.run do
     response = request.get("/", host)
     assert(response.ok?, "expected HTTP 200, got #{response.status}")
     assert(response.body.include?("Could not load Neo4j"), "archive error message missing")
+    assert(response.body.include?('class="notice notice-error"'), "archive error is not styled")
+    assert(response.body.include?('role="alert"'), "archive error is not announced")
     assert(response.body.include?("NewsAgg: Your media aggregator"), "dashboard heading missing")
   ensure
     Rails.application.config.x.archive_factory = -> { FakeArchive.new(rows) }

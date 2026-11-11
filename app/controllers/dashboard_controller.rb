@@ -6,6 +6,8 @@ require_relative "../services/archive"
 require_relative "../services/dashboard_filter"
 
 class DashboardController < ActionController::Base
+  layout "application"
+
   skip_forgery_protection only: :update_auto_pull
 
   def show
@@ -65,6 +67,10 @@ class DashboardController < ActionController::Base
     send_file Rails.root.join("public/dashboard.js"), type: "application/javascript", disposition: "inline"
   end
 
+  def dashboard_css
+    send_file Rails.root.join("public/dashboard.css"), type: "text/css", disposition: "inline"
+  end
+
   private
 
   def prepare_dashboard
@@ -83,7 +89,7 @@ class DashboardController < ActionController::Base
 
   def archive
     factory = Rails.application.config.x.archive_factory
-    factory ? factory.call : Archive.new
+    factory&.call || Archive.new
   end
 
   def auto_pull_flag

@@ -6,4 +6,5 @@ Rails.application.routes.draw do
   put "/auto-pull", to: "dashboard#update_auto_pull"
   get "/turbo.js", to: "dashboard#turbo"
   get "/dashboard.js", to: "dashboard#dashboard_js"
+  get "/dashboard.css", to: "dashboard#dashboard_css"
 end

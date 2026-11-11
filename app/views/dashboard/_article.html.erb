@@ -1,7 +1,10 @@
 <article>
-  <small><%= [article["publisher"], article["depth"],
-    article["published_date"] ? "Published #{article["published_date"]}" : "Publication date unknown",
-    article["archive_date"] && "Added #{article["archive_date"]}"].compact.reject(&:empty?).join(" · ") %></small>
+  <small class="article-meta">
+    <% meta = [article["publisher"], article["depth"],
+      article["published_date"] ? "Published #{article["published_date"]}" : "Publication date unknown",
+      article["archive_date"] && "Added #{article["archive_date"]}"].compact.reject(&:empty?) %>
+    <% meta.each do |item| %><span><%= item %></span><% end %>
+  </small>
   <h3><%= article["title"] %></h3>
   <p><%= article["summary"] %></p>
   <div class="tags">
