@@ -45,6 +45,9 @@ jobs:
       - name: Ingestion integration test
         shell: pwsh
         run: bundle exec ruby test/integration/ingestion_test.rb
+      - name: Auto-pull integration test
+        shell: pwsh
+        run: bundle exec ruby test/integration/auto_pull_test.rb
       - name: Smoke test Rails routes
         shell: pwsh
         run: |

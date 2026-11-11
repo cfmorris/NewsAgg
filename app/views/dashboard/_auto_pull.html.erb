@@ -3,4 +3,14 @@
     <input id="auto-pull" type="checkbox" role="switch"
       <%= "checked" if auto_pull_enabled? %> data-auto-pull> Auto-pull
   </label>
+  <% state = auto_pull_worker_state %>
+  <small id="auto-pull-status" class="auto-pull-status<%= " auto-pull-status-error" if state[:last_error] %>" role="status">
+    <% if state[:last_error] %>
+      Last pull failed: <%= state[:last_error] %>
+    <% elsif state[:last_run_at] %>
+      Last pull <%= auto_pull_last_run_text %>
+    <% else %>
+      No pull yet
+    <% end %>
+  </small>
 </div>
