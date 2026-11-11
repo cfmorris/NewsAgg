@@ -275,8 +275,8 @@ aside.filter-panel {
 /* Article cards ---------------------------------------------------------- */
 
 article {
-  margin-bottom: .9rem;
-  padding: 1.25rem 1.35rem;
+  margin-bottom: .6rem;
+  padding: .9rem 1rem;
   background: linear-gradient(180deg, #131e37 0%, var(--surface) 100%);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -288,13 +288,26 @@ article:hover { border-color: var(--border-strong); box-shadow: var(--shadow-lg)
 
 article small {
   display: block;
-  margin-bottom: .45rem;
+  margin-bottom: .3rem;
   color: var(--text-muted);
-  font-size: .82rem;
+  font-size: .75rem;
   letter-spacing: .01em;
 }
 
-article p { color: var(--text-body); max-width: 72ch }
+article p { color: var(--text-body); max-width: 72ch; margin: .35rem 0 0; font-size: .95rem; line-height: 1.5 }
+
+/* Title row: the heading text and its topic pills share one compact line. */
+.article-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .15rem .55rem;
+  margin: 0;
+  font-size: 1.15rem;
+  line-height: 1.25;
+}
+
+.article-title-text { min-width: 0; overflow-wrap: anywhere }
 
 .article-meta { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: .45rem; row-gap: .1rem }
 .article-meta > span { white-space: nowrap }
@@ -302,12 +315,12 @@ article p { color: var(--text-body); max-width: 72ch }
 
 #articles > article:last-child { margin-bottom: 0 }
 
-.tags { display: flex; flex-wrap: wrap; gap: .4rem; margin: .85rem 0 }
+.tags { display: flex; flex-wrap: wrap; gap: .3rem; max-width: 100%; margin: 0 }
 
 .tags a, .tags button {
   display: inline-block;
-  padding: .18rem .6rem;
-  font-size: .78rem;
+  padding: .1rem .5rem;
+  font-size: .75rem;
   text-decoration: none;
   color: var(--accent);
   background: var(--surface-sunken);
@@ -520,7 +533,7 @@ turbo-frame[busy] #count {
   main { padding: 1.5rem 1rem 3rem }
   .quick-filters { grid-template-columns: 1fr; gap: .75rem }
   #auto-pull-control { justify-content: flex-start }
-  article { padding: 1rem 1.05rem }
+  article { padding: .75rem .85rem }
   #update-status { left: 1rem; right: 1rem; bottom: 1rem }
   #apply-update { width: 100% }
 
