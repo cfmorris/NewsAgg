@@ -1,0 +1,73 @@
+#!/usr/bin/env ruby
+require "optparse"
+
+require_relative "../config/environment"
+require_relative "../app/services/ingestion_runner"
+
+POLL_SECONDS = 60
+DEFAULT_RETRY = File.expand_path("../tmp/hn-retry.json", __dir__)
+AUTO_PULL_FLAG = File.expand_path("../tmp/auto-pull.enabled", __dir__)
+
+options = { feed: "new", limit: 10, retry_path: DEFAULT_RETRY, dry_run: false, watch: false }
+
+parser = OptionParser.new do |opts|
+  opts.banner = "Usage: ruby bin/ingest-hn [--feed new|top|best] [--limit N] " \
+    "[--retry-file PATH] [--dry-run] [--watch]"
+  opts.on("--feed FEED", %w[new top best], "Hacker News feed (default: new)") { |value| options[:feed] = value }
+  opts.on("--limit N", Integer, "Maximum stories per batch (1-500)") { |value| options[:limit] = value }
+  opts.on("--retry-file PATH", "Retry file (default: tmp/hn-retry.json)") { |value| options[:retry_path] = value }
+  opts.on("--dry-run", "Print records without importing or writing retries") { options[:dry_run] = true }
+  opts.on("--watch", "Run a batch every 60 seconds while Auto-pull is enabled") { options[:watch] = true }
+  opts.on("-h", "--help", "Show this help") do
+    puts opts
+    puts
+    puts "Provider configuration (required):"
+    puts "  NEWSAGG_SUMMARY_PROVIDER=deepseek"
+    puts "  DEEPSEEK_API_KEY=<key>"
+    puts "Optional: DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, NEWSAGG_SUMMARY_TIMEOUT_MS"
+    puts "Neo4j: NEO4J_HTTP_URL, NEO4J_DATABASE, NEO4J_USER, NEO4J_PASSWORD"
+    exit 0
+  end
+end
+
+begin
+  parser.parse!(ARGV)
+rescue OptionParser::ParseError => error
+  warn error.message
+  warn parser
+  exit 2
+end
+
+unless HackerNewsClient::FEEDS.include?(options[:feed]) && options[:limit].is_a?(Integer) &&
+    options[:limit].between?(1, 500)
+  warn "Use --feed new|top|best and --limit 1-500."
+  exit 2
+end
+
+def run_batch(options)
+  IngestionRunner.new(retry_path: options[:retry_path]).run(
+    feed: options[:feed], limit: options[:limit], dry_run: options[:dry_run]
+  )
+rescue DeepseekSummarizer::SummaryError, RetryStore::Invalid => error
+  warn error.message
+  2
+rescue Archive::Unavailable => error
+  warn "Hacker News batch failed: the archive is unavailable (#{error.message})"
+  1
+rescue HttpClient::Error => error
+  warn "Hacker News batch failed: #{error.message}"
+  1
+end
+
+if options[:watch]
+  loop do
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    if File.file?(AUTO_PULL_FLAG)
+      exit 2 if run_batch(options) == 2
+    end
+    elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+    sleep([POLL_SECONDS - elapsed, 0].max)
+  end
+else
+  exit run_batch(options)
+end

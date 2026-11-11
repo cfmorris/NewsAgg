@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NewsAgg: Your media aggregator</title>
+  <script src="/turbo.js" defer></script>
+  <script src="/dashboard.js" defer></script>
+  <style>
+    * { box-sizing: border-box }
+    body { margin: 0; background: #f2f3ee; color: #172620; font: 16px/1.55 "Segoe UI", sans-serif }
+    main { max-width: 1120px; margin: auto; padding: 3rem 1.4rem }
+    h1 { font: 600 clamp(1.35rem, 3.5vw, 2.5rem)/1 Georgia, serif; margin: .4rem 0 1rem }
+    h2 { font-size: 1.15rem; margin: 0 0 1rem }
+    h3 { font: 600 1.45rem Georgia, serif; margin: .5rem 0 }
+    p { margin: .6rem 0 }
+    small { color: #466054 }
+    .layout { display: grid; grid-template-columns: 285px 1fr; gap: 1.4rem; margin-top: 2rem; align-items: start }
+    .quick-filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(10rem, .35fr) auto; gap: 1rem; max-width: 52rem }
+    .auto-pull { display: flex; align-self: end; align-items: center; gap: .6rem; min-height: 2.25rem; white-space: nowrap }
+    .auto-pull input {
+      appearance: none; position: relative; width: 2.65rem; height: 1.5rem;
+      margin: 0; padding: 0; border: 1px solid #668174; border-radius: 1rem;
+      background: #c7d8ce; cursor: pointer;
+    }
+    .auto-pull input::before {
+      content: ""; position: absolute; top: .16rem; left: .16rem;
+      width: 1.05rem; height: 1.05rem; border-radius: 50%; background: #fff;
+    }
+    .auto-pull input:checked { background: #173d30 }
+    .auto-pull input:checked::before { left: 1.32rem }
+    .auto-pull input:focus-visible { outline: 2px solid #245d49; outline-offset: 3px }
+    .auto-pull input:disabled { opacity: .55; cursor: default }
+    aside, article { background: #fff; border: 1px solid #d8e0d8; border-radius: .85rem; padding: 1.2rem }
+    article { margin-bottom: .85rem }
+    button, select, input { font: inherit; color: inherit; background: #ecf2ed; border: 1px solid #d5e2d8; border-radius: .4rem; padding: .3rem .55rem }
+    button, select { cursor: pointer }
+    button[aria-pressed="true"] { background: #173d30; color: #fff }
+    .bar { display: flex; position: relative; isolation: isolate; justify-content: space-between; width: 100%; margin: .35rem 0; text-align: left; overflow: hidden }
+    .bar[aria-pressed="false"]::before { content: ""; position: absolute; inset: 0 auto 0 0; width: var(--share); background: #c7ded1; z-index: -1 }
+    .subtopics { margin: .25rem 0 .6rem .6rem; padding-left: .65rem; border-left: 2px solid #d5e2d8 }
+    .subtopics .bar { font-size: .9rem }
+    label { display: block; margin-top: 1rem; font-weight: 600 }
+    select, input { display: block; width: 100%; margin-top: .25rem }
+    .quick-filters label { margin-top: 0 }
+    .tags { display: flex; flex-wrap: wrap; gap: .35rem; margin: .75rem 0 }
+    .tags button { font-size: .85rem }
+    #update-status { position: fixed; bottom: 1rem; right: 1rem; z-index: 2; margin: 0 }
+    #apply-update { background: #173d30; color: #fff; padding: .6rem .85rem }
+    a { color: #245d49 }
+    @media (max-width: 700px) { .layout, .quick-filters { grid-template-columns: 1fr } }
+  </style>
+</head>
+<body>
+  <%= yield %>
+</body>
+</html>

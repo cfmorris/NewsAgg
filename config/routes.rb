@@ -1,8 +1,9 @@
 Rails.application.routes.draw do
   root "dashboard#show"
   get "/articles", to: "dashboard#articles"
-  get "/articles/stream", to: "dashboard#stream"
+  get "/dashboard/stream", to: "dashboard#stream"
   get "/auto-pull", to: "dashboard#auto_pull"
   put "/auto-pull", to: "dashboard#update_auto_pull"
   get "/turbo.js", to: "dashboard#turbo"
+  get "/dashboard.js", to: "dashboard#dashboard_js"
 end
