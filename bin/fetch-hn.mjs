@@ -4,7 +4,7 @@ import { pathToFileURL } from "node:url";
 
 export const API = "https://hacker-news.firebaseio.com/v0";
 const FEEDS = ["new", "top", "best"];
-const DEFAULT_ARCHIVE = "http://127.0.0.1:3000/articles";
+export const DEFAULT_ARCHIVE = "http://127.0.0.1:3000/articles";
 
 class UsageError extends Error {}
 
@@ -26,7 +26,7 @@ function parseOptions(args) {
   return { feed: values.feed, limit, archive: values.archive };
 }
 
-function urlKey(value) {
+export function urlKey(value) {
   if (!value) return null;
   try {
     const url = new URL(value);
@@ -41,6 +41,32 @@ function urlKey(value) {
   }
 }
 
+export function archiveKeys(rows) {
+  const knownUrls = new Set();
+  const knownDiscussions = new Set();
+  for (const article of Array.isArray(rows) ? rows : []) {
+    const key = urlKey(article?.url);
+    if (key) knownUrls.add(key);
+    for (const discovery of article?.discoveries || []) {
+      if (discovery?.source !== "Hacker News" || typeof discovery.url !== "string") continue;
+      try {
+        const id = new URL(discovery.url).searchParams.get("id");
+        if (id) knownDiscussions.add(id);
+      } catch {
+        // Ignore malformed discovery URLs rather than failing the whole run.
+      }
+    }
+  }
+  return { knownUrls, knownDiscussions };
+}
+
+export async function loadArchive({ archive, fetchImpl = globalThis.fetch,
+  readStdin = () => text(process.stdin) }) {
+  const rows = archive === "-" ? JSON.parse(await readStdin()) : await json(archive, fetchImpl);
+  if (!Array.isArray(rows)) throw new Error("Expected an article array.");
+  return rows;
+}
+
 async function json(url, fetchImpl) {
   const response = await fetchImpl(url, { signal: AbortSignal.timeout(10_000) });
   if (!response.ok) throw new Error(`${url} returned HTTP ${response.status}`);
@@ -51,21 +77,19 @@ export async function collectCandidates({
   feed,
   limit,
   archive,
+  archiveRows,
   fetchImpl = globalThis.fetch,
   readStdin = () => text(process.stdin)
 }) {
-  const [archiveRows, ids] = await Promise.all([
-    archive === "-" ? readStdin().then(JSON.parse) : json(archive, fetchImpl),
+  const [rows, ids] = await Promise.all([
+    archiveRows ? Promise.resolve(archiveRows) : loadArchive({ archive, fetchImpl, readStdin }),
     json(`${API}/${feed}stories.json`, fetchImpl)
   ]);
-  if (!Array.isArray(archiveRows) || !Array.isArray(ids)) {
+  if (!Array.isArray(rows) || !Array.isArray(ids)) {
     throw new Error("Expected article and Hacker News ID arrays.");
   }
 
-  const knownUrls = new Set(archiveRows.map(article => urlKey(article.url)).filter(Boolean));
-  const knownDiscussions = new Set(archiveRows.flatMap(article => (article.discoveries || [])
-    .filter(discovery => discovery.source === "Hacker News")
-    .map(discovery => new URL(discovery.url).searchParams.get("id"))));
+  const { knownUrls, knownDiscussions } = archiveKeys(rows);
   const unseen = [...new Set(ids)].filter(id => Number.isSafeInteger(id) && !knownDiscussions.has(String(id)));
   const stories = [];
   const concurrency = 12;

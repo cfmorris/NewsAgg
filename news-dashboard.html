@@ -13,10 +13,21 @@ h3 { font: 600 1.45rem Georgia, serif; margin: .5rem 0 }
 p { margin: .6rem 0 }
 small { color: #466054 }
 .layout { display: grid; grid-template-columns: 285px 1fr; gap: 1.4rem; margin-top: 2rem; align-items: start }
-.quick-filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(12rem, .35fr); gap: 1rem; max-width: 45rem }
-.pull-controls:not([hidden]) { display: flex; align-self: end; align-items: center; gap: .65rem; flex-wrap: wrap }
-.pull-controls small { white-space: nowrap; font-variant-numeric: tabular-nums }
-@media (min-width: 701px) { .quick-filters { grid-template-columns: minmax(0, 1fr) minmax(11rem, .45fr) auto; max-width: 65rem } }
+.quick-filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(10rem, .35fr) auto; gap: 1rem; max-width: 52rem }
+.auto-pull { display: flex; align-self: end; align-items: center; gap: .6rem; min-height: 2.25rem; white-space: nowrap }
+.auto-pull input {
+  appearance: none; position: relative; width: 2.65rem; height: 1.5rem;
+  margin: 0; padding: 0; border: 1px solid #668174; border-radius: 1rem;
+  background: #c7d8ce; cursor: pointer;
+}
+.auto-pull input::before {
+  content: ""; position: absolute; top: .16rem; left: .16rem;
+  width: 1.05rem; height: 1.05rem; border-radius: 50%; background: #fff;
+}
+.auto-pull input:checked { background: #173d30 }
+.auto-pull input:checked::before { left: 1.32rem }
+.auto-pull input:focus-visible { outline: 2px solid #245d49; outline-offset: 3px }
+.auto-pull input:disabled { opacity: .55; cursor: default }
 aside, article { background: #fff; border: 1px solid #d8e0d8; border-radius: .85rem; padding: 1.2rem }
 article { margin-bottom: .85rem }
 button, select, input { font: inherit; color: inherit; background: #ecf2ed; border: 1px solid #d5e2d8; border-radius: .4rem; padding: .3rem .55rem }
@@ -51,16 +62,11 @@ a { color: #245d49 }
       <option value="720">Last month</option>
       <option value="" selected>All time</option>
     </select></label>
-    <div class="pull-controls" id="pull-controls" hidden>
-      <button type="button" id="pull-articles">Pull articles</button>
-      <small id="pull-clock">Last pull · Never</small>
-    </div>
+    <label class="auto-pull">
+      <input id="auto-pull" type="checkbox" role="switch" disabled> Auto-pull
+    </label>
   </div>
-  <p id="pull-status" role="status" hidden></p>
-  <details id="pull-results" hidden>
-    <summary id="pull-summary"></summary>
-    <ul id="pull-list"></ul>
-  </details>
+  <p id="auto-pull-error" role="status" hidden></p>
   <div class="layout">
     <aside aria-label="Article filters">
       <h2>Topics</h2>
@@ -389,59 +395,50 @@ async function loadDashboard() {
   populateFilters();
   render();
 }
-if (location.protocol !== "file:") {
-  const pullButton = document.querySelector("#pull-articles");
-  const pullClock = document.querySelector("#pull-clock");
-  const pullStatus = document.querySelector("#pull-status");
-  const pullResults = document.querySelector("#pull-results");
-  const storageKey = "newsagg.last-pull";
-  let lastPull = Number(localStorage.getItem(storageKey));
-
-  function updatePullClock() {
-    const seconds = Math.max(0, Math.floor((Date.now() - lastPull) / 1000));
-    const elapsed = new Intl.NumberFormat(undefined, { minimumIntegerDigits: 2, useGrouping: false });
-    const time = [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60]
-      .map(value => elapsed.format(value)).join(":");
-    pullClock.textContent = lastPull ? "Last pull · " + time + " ago" : "Last pull · Never";
+async function setupAutoPull() {
+  const toggle = document.querySelector("#auto-pull");
+  const error = document.querySelector("#auto-pull-error");
+  async function readSetting(options) {
+    const response = await fetch("/auto-pull", { cache: "no-store", ...options });
+    if (!response.ok) throw new Error("Auto-pull request failed");
+    return (await response.json()).enabled;
   }
 
-  document.querySelector("#pull-controls").hidden = false;
-  updatePullClock();
-  window.setInterval(updatePullClock, 1000);
-
-  pullButton.addEventListener("click", async () => {
-    pullButton.disabled = true;
-    pullStatus.hidden = false;
-    pullStatus.textContent = "Checking Hacker News…";
+  let enabled;
+  try {
+    enabled = await readSetting();
+    toggle.checked = enabled;
+    toggle.disabled = false;
+  } catch {
+    error.textContent = "Could not load Auto-pull settings.";
+    error.hidden = false;
+    return;
+  }
+  toggle.addEventListener("change", async () => {
+    toggle.disabled = true;
+    error.hidden = true;
     try {
-      const response = await fetch("/articles/pull", {
-        method: "POST",
+      enabled = await readSetting({
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: "{}"
+        body: JSON.stringify({ enabled: toggle.checked })
       });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Article pull failed.");
-      lastPull = Date.parse(result.pulled_at);
-      localStorage.setItem(storageKey, String(lastPull));
-      updatePullClock();
-      pullStatus.textContent = result.candidates.length ? "" : "No unseen stories found.";
-      pullStatus.hidden = Boolean(result.candidates.length);
-      pullResults.hidden = !result.candidates.length;
-      pullResults.open = Boolean(result.candidates.length);
-      document.querySelector("#pull-summary").textContent = result.candidates.length + " stories awaiting review";
-      document.querySelector("#pull-list").replaceChildren(...result.candidates.map(candidate => {
-        const item = document.createElement("li");
-        const link = element("a", candidate.title);
-        link.href = candidate.url;
-        item.append(link);
-        return item;
-      }));
-    } catch (error) {
-      pullStatus.textContent = error.message || "Article pull failed.";
+    } catch {
+      error.textContent = "Could not update Auto-pull.";
+      error.hidden = false;
     } finally {
-      pullButton.disabled = false;
+      toggle.checked = enabled;
+      toggle.disabled = false;
     }
   });
+}
+
+if (location.protocol !== "file:") {
+  setupAutoPull();
+} else {
+  const previewToggle = document.querySelector("#auto-pull");
+  previewToggle.disabled = false;
+  previewToggle.title = "Preview only. Open the live archive to control ingestion.";
 }
 loadDashboard();
 </script>

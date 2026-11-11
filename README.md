@@ -52,8 +52,42 @@ The importer accepts a JSON array from standard input. Each row has a canonical
 A second discovery for the same
 canonical URL adds a discovery link and reuses the original summary.
 
-The source pollers, automated classification, and scheduled imports are pending.
+Source pollers for other sites and scheduled imports are pending.
 The current queries use standard Cypher.
+
+### Automated Hacker News batch
+
+The batch command combines the intake script with public article fetches, publisher
+extraction, DeepSeek structured summaries and tags, and the existing Neo4j importer:
+
+```powershell
+$env:NEWSAGG_SUMMARY_PROVIDER = 'deepseek'
+$env:DEEPSEEK_API_KEY = Read-Host 'DeepSeek API key' -MaskInput
+node bin/ingest-hn.mjs --limit 10 --retry-file tmp/hn-retry.json
+```
+
+For automatic updates, run `node bin/ingest-hn.mjs --watch` in a separate
+terminal with the same provider and Neo4j settings. Keep Rails and the worker
+running from the same checkout. Auto-pull starts off. Turn it on beside
+**Date added** to let the worker run a batch at its next 60-second check.
+Turn it off to skip future batches. Any batch already running finishes.
+The dashboard refreshes after articles are imported. Press Ctrl+C to stop
+the worker.
+
+Set `DEEPSEEK_BASE_URL` and `DEEPSEEK_MODEL` to override the provider defaults, and
+`NEWSAGG_RUBY` if the Ruby executable is not on `PATH`. The command reads the live
+archive (or `--archive -` for JSON on standard input), never calls the model for URLs
+already in the archive, and prints the importer-contract records on standard output.
+Use `--dry-run` to print records without writing Neo4j or the retry file.
+
+Article fetches are limited to public HTTP(S): credentials in URLs, private or mixed
+DNS answers, non-HTML bodies, HTTPS downgrades, and oversized or slow responses are
+rejected. Redirects, body size, DNS resolution, and total time are bounded. Publisher
+text and article prose are treated as untrusted data: tags and control characters are
+stripped, model-returned topics must match the local taxonomy, and model output can
+never set the article URL, publisher, or source. Failed fetches and imports are written
+to the retry file with their attempt count, and the next batch retries them without
+re-running a completed summary.
 
 ## Tests
 
