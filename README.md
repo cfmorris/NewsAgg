@@ -1,36 +1,18 @@
 # Technical Reading Room
 
-### Collect Hacker News candidates
-
-With the dashboard running and Node.js 20 or later, run:
-
-```powershell
-node bin/fetch-hn.mjs --limit 10
-```
-
-The script reads the official Hacker News API and checks candidates against the live
-archive by discussion ID and article URL. Use `--feed top` or `--feed best` to
-change the feed, or `--archive` to point to another dashboard's articles endpoint.
-
-Review each source and add `publisher`, a three-sentence `summary`, `depth`,
-and `topics` to the candidate record. Add `published_date` when the source
-verifies it. The `submitted_at` field is the Hacker News submission time.
-Save the reviewed array as UTF-8 JSON and send it to the existing importer:
-
-```powershell
-Get-Content -Raw -Encoding UTF8 .\reviewed-articles.json | ruby .\bin\import-news
-```
-
-Rails serves the dashboard and reads the archive through Neo4j's HTTP Query API.
-Opening `news-dashboard.html` directly shows the first digest as an offline preview.
+Rails owns the dashboard: controllers and views render the archive, filter it, and
+compute every article and topic count on the server. Turbo keeps the page current.
+Ruby services own Hacker News intake, article fetching, DeepSeek summarization,
+retries, and Neo4j imports; a Rails-backed worker process runs them. No Node.js
+installation is required.
 
 ## Run locally
 
 Install Ruby 3.2 or newer with Bundler and the RubyInstaller MSYS2 toolchain,
-start your Neo4j instance, and run these
-commands from this directory in PowerShell. Set the database and user for the
-archive if they differ from the defaults. The import creates constraints and
-writes nodes with labels prefixed by `News`.
+start your Neo4j instance, and run these commands from this directory in
+PowerShell. Set the database and user for the archive if they differ from the
+defaults. The import creates constraints and writes nodes with labels prefixed
+by `News`.
 
 ```powershell
 $env:BUNDLE_PATH = 'vendor/bundle'
@@ -49,54 +31,72 @@ loopback because the dashboard has no separate user login.
 The importer accepts a JSON array from standard input. Each row has a canonical
 `url`, `title`, `summary`, `depth`, `publisher`, `topics` array, `source`,
 `external_id`, and optional `discovery_url` and `published_date` (YYYY-MM-DD).
-A second discovery for the same
-canonical URL adds a discovery link and reuses the original summary.
+A second discovery for the same canonical URL adds a discovery link and reuses
+the original summary.
 
 Source pollers for other sites and scheduled imports are pending.
 The current queries use standard Cypher.
 
+### Dashboard behavior
+
+Search, date presets, date ranges, publisher, discovery source, technical depth,
+and topic filters all run through `/` and are applied in Ruby by
+`DashboardFilter`. The page renders inside a Turbo frame, so changing a filter
+updates the article list, topic counts, and count heading without a full reload.
+The browser only supplies interaction behavior: it submits filters, controls the
+Auto-pull toggle, and polls the Turbo stream that announces new archive
+versions. When a new version arrives while the page is scrolled or focused, the
+dashboard offers **New articles available** instead of yanking the view.
+
 ### Automated Hacker News batch
 
-The batch command combines the intake script with public article fetches, publisher
-extraction, DeepSeek structured summaries and tags, and the existing Neo4j importer:
+The Ruby worker combines Hacker News intake, public article fetches, publisher
+extraction, DeepSeek structured summaries and tags, and the Neo4j importer:
 
 ```powershell
 $env:NEWSAGG_SUMMARY_PROVIDER = 'deepseek'
 $env:DEEPSEEK_API_KEY = Read-Host 'DeepSeek API key' -MaskInput
-node bin/ingest-hn.mjs --limit 10 --retry-file tmp/hn-retry.json
+ruby bin/ingest-hn --limit 10 --retry-file tmp/hn-retry.json
 ```
 
-For automatic updates, run `node bin/ingest-hn.mjs --watch` in a separate
-terminal with the same provider and Neo4j settings. Keep Rails and the worker
-running from the same checkout. Auto-pull starts off. Turn it on beside
-**Date added** to let the worker run a batch at its next 60-second check.
-Turn it off to skip future batches. Any batch already running finishes.
-The dashboard refreshes after articles are imported. Press Ctrl+C to stop
-the worker.
+For automatic updates, run `ruby bin/ingest-hn --watch` in a separate terminal
+with the same provider and Neo4j settings. Keep Rails and the worker running
+from the same checkout. Auto-pull starts off. Turn it on beside **Date added**
+to let the worker run a batch at its next 60-second check. Turn it off to skip
+future batches. Any batch already running finishes. Press Ctrl+C to stop the
+worker.
 
-Set `DEEPSEEK_BASE_URL` and `DEEPSEEK_MODEL` to override the provider defaults, and
-`NEWSAGG_RUBY` if the Ruby executable is not on `PATH`. The command reads the live
-archive (or `--archive -` for JSON on standard input), never calls the model for URLs
-already in the archive, and prints the importer-contract records on standard output.
-Use `--dry-run` to print records without writing Neo4j or the retry file.
+Set `DEEPSEEK_BASE_URL` and `DEEPSEEK_MODEL` to override the provider defaults.
+Use `--feed top` or `--feed best` to change the Hacker News feed, `--dry-run` to
+print records without writing Neo4j or the retry file, and `--limit` to bound a
+batch. The worker reads the live archive, never calls the model for URLs already
+in the archive, and prints the importer-contract records on standard output.
 
-Article fetches are limited to public HTTP(S): credentials in URLs, private or mixed
-DNS answers, non-HTML bodies, HTTPS downgrades, and oversized or slow responses are
-rejected. Redirects, body size, DNS resolution, and total time are bounded. Publisher
-text and article prose are treated as untrusted data: tags and control characters are
-stripped, model-returned topics must match the local taxonomy, and model output can
-never set the article URL, publisher, or source. Failed fetches and imports are written
-to the retry file with their attempt count, and the next batch retries them without
-re-running a completed summary.
+Article fetches are limited to public HTTP(S): credentials in URLs, private or
+mixed DNS answers, non-HTML bodies, HTTPS downgrades, and oversized or slow
+responses are rejected. Redirects, body size, DNS resolution, and total time are
+bounded. Publisher text and article prose are treated as untrusted data: tags
+and control characters are stripped, model-returned topics must match the local
+taxonomy, and model output can never set the article URL, publisher, or source.
+Failed fetches and imports are written to the retry file with their attempt
+count, and the next batch retries them without re-running a completed summary.
 
 ## Tests
 
-The intake tests use Node's built-in test runner with recorded Hacker News
-responses. They never call the live Hacker News API.
+The dashboard and ingestion integration tests use stubbed external services and a
+disposable archive, so they never call Hacker News, DeepSeek, or a live Neo4j
+database:
 
 ```powershell
-node --test test/intake/fetch-hn.test.mjs
+bundle exec ruby test/integration/dashboard_test.rb
+bundle exec ruby test/integration/ingestion_test.rb
 ```
+
+The first exercises Rails rendering, server-side filtering and counts, the Turbo
+stream ETag, and the Auto-pull endpoint. The second runs the Ruby ingestion
+pipeline against recorded Hacker News and article fixtures, a fake DeepSeek
+endpoint, and a disposable in-memory archive, including retry handling and secret
+redaction.
 
 The repeat-import integration test needs a throwaway Neo4j server. The wrapper
 downloads pinned Neo4j Community 5.26.0 and, when Java 21 is not available, a
@@ -111,4 +111,5 @@ The test refuses to run unless `NEO4J_TEST_DISPOSABLE=1` is set, the URL is
 loopback, and the HTTP port is not 7474. It never connects to an existing local
 database or reads local credentials; the wrapper generates a password for the
 disposable server. Add `-Keep` to inspect the `tmp/neo4j-test-*` directory after
-a failure. GitHub Actions runs both test commands in the required `checks` job.
+a failure. GitHub Actions runs all three test commands in the required `checks`
+job.

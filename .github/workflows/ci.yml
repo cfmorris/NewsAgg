@@ -23,9 +23,6 @@ jobs:
         with:
           ruby-version: '4.0.9'
           bundler-cache: true
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '24'
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -35,24 +32,19 @@ jobs:
         with:
           path: tmp/neo4j-cache
           key: neo4j-test-${{ runner.os }}-5.26.0-jre-21.0.13
-      - name: Intake tests
-        shell: pwsh
-        run: node --test test/intake/fetch-hn.test.mjs test/intake/ingest-hn.test.mjs
-      - name: Check Ruby and JavaScript syntax
+      - name: Check Ruby syntax
         shell: pwsh
         run: |
-          foreach ($file in @('bin/import-news', 'config.ru') + @(Get-ChildItem app,config -Filter *.rb -Recurse | ForEach-Object FullName)) {
+          foreach ($file in @('bin/import-news', 'bin/ingest-hn', 'config.ru') + @(Get-ChildItem app,config,test -Filter *.rb -Recurse | ForEach-Object FullName)) {
             ruby -c $file
             if ($LASTEXITCODE) { exit $LASTEXITCODE }
           }
-          foreach ($file in @('bin/fetch-hn.mjs', 'bin/ingest-hn.mjs') + @(Get-ChildItem lib/ingest -Filter *.mjs -Recurse | ForEach-Object FullName)) {
-            node --check $file
-            if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          }
-          $html = Get-Content -Raw -Encoding UTF8 news-dashboard.html
-          $script = [regex]::Match($html, '(?s)<script>(.*?)</script>')
-          if (!$script.Success) { throw 'Dashboard script is missing' }
-          $script.Groups[1].Value | node --check
+      - name: Dashboard integration test
+        shell: pwsh
+        run: bundle exec ruby test/integration/dashboard_test.rb
+      - name: Ingestion integration test
+        shell: pwsh
+        run: bundle exec ruby test/integration/ingestion_test.rb
       - name: Smoke test Rails routes
         shell: pwsh
         run: |

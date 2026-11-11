@@ -1,0 +1,82 @@
+require "json"
+require "uri"
+
+require_relative "http_client"
+require_relative "url_key"
+
+# Reads the public Hacker News API and returns unseen story candidates.
+class HackerNewsClient
+  API = "https://hacker-news.firebaseio.com/v0".freeze
+  FEEDS = %w[new top best].freeze
+  CONCURRENCY = 12
+
+  def initialize(http: HttpClient.new, api: API)
+    @http = http
+    @api = api
+  end
+
+  def collect_candidates(feed:, limit:, archive_rows:)
+    raise ArgumentError, "Use --feed new|top|best and --limit 1-500." unless
+      FEEDS.include?(feed.to_s) && limit.is_a?(Integer) && limit.between?(1, 500)
+
+    ids = @http.get_json("#{@api}/#{feed}stories.json")
+    raise ArgumentError, "Expected Hacker News ID arrays." unless ids.is_a?(Array)
+
+    known_urls, known_discussions = archive_keys(archive_rows)
+    unseen = ids.uniq.select { |id| id.is_a?(Integer) && !known_discussions.include?(id.to_s) }
+    stories = []
+
+    unseen.each_slice(CONCURRENCY) do |slice|
+      break if stories.length >= limit
+
+      slice.each do |id|
+        break if stories.length >= limit
+
+        item = begin
+          @http.get_json("#{@api}/item/#{id}.json")
+        rescue HttpClient::Error
+          nil
+        end
+        next unless item.is_a?(Hash)
+        next unless item["type"] == "story" && !item["dead"] && !item["deleted"] && item["title"]
+
+        discovery_url = "https://news.ycombinator.com/item?id=#{item["id"]}"
+        key = UrlKey.call(item["url"] || discovery_url)
+        next unless key
+        next if known_urls.include?(key)
+
+        known_urls << key
+        stories << {
+          "title" => item["title"],
+          "url" => item["url"] || discovery_url,
+          "source" => "Hacker News",
+          "external_id" => item["id"].to_s,
+          "discovery_url" => discovery_url,
+          "submitted_at" => Time.at(item["time"].to_i).utc.iso8601,
+          "score" => item["score"]
+        }
+      end
+    end
+
+    stories
+  end
+
+  def archive_keys(rows)
+    known_urls = []
+    known_discussions = []
+    Array(rows).each do |article|
+      key = UrlKey.call(article["url"])
+      known_urls << key if key
+      Array(article["discoveries"]).each do |discovery|
+        next unless discovery.is_a?(Hash) && discovery["source"] == "Hacker News"
+        next unless discovery["url"].is_a?(String)
+
+        id = URI.decode_www_form(URI.parse(discovery["url"]).query.to_s).to_h["id"]
+        known_discussions << id if id
+      rescue URI::InvalidURIError
+        next
+      end
+    end
+    [known_urls, known_discussions]
+  end
+end

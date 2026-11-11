@@ -1,0 +1,116 @@
+<main>
+  <small id="edition">News archive</small>
+  <h1>NewsAgg: Your media aggregator</h1>
+  <p id="intro"<% if @archive_error %> class="notice notice-error" role="alert"<% end %>><%= @archive_error || "Browse the archive by subject, publisher, discovery source, or technical depth." %></p>
+
+  <form id="filter-form" method="get" action="/" data-turbo-frame="dashboard" data-turbo-action="advance"></form>
+
+  <div class="quick-filters" role="search" aria-label="Search the archive">
+    <label>Search articles
+      <input form="filter-form" id="search" name="q" type="search" value="<%= @filter.params_value(:q) %>"
+        placeholder="Search titles, summaries, or tags" data-autosubmit>
+    </label>
+    <label>Date added
+      <select form="filter-form" id="date-preset" name="date_preset" data-autosubmit>
+        <% DashboardFilter::DATE_PRESETS.each_key do |value| %>
+          <option value="<%= value %>" <%= "selected" if @filter.params_value(:date_preset) == value %>>
+            <%= DashboardFilter::DATE_PRESET_LABELS.fetch(value) %>
+          </option>
+        <% end %>
+        <option value="" <%= "selected" if @filter.params_value(:date_preset).empty? %>>All time</option>
+      </select>
+    </label>
+    <%= render "auto_pull" %>
+  </div>
+  <p id="auto-pull-error" class="notice notice-error" role="status" hidden></p>
+
+  <p id="update-status" role="status" hidden>
+    <button id="apply-update" type="button">New articles available</button>
+  </p>
+
+  <turbo-frame id="dashboard">
+    <div class="layout">
+      <aside class="filter-panel" aria-label="Article filters">
+        <h2>Topics</h2>
+        <nav aria-label="Topics by subject">
+        <div id="topics">
+          <%= link_to filter_link(topic: nil, heading: nil),
+            class: "bar", data: { turbo_frame: "dashboard" },
+            "aria-pressed" => (@filter.selected_topic.empty? && @filter.selected_heading.empty?).to_s,
+            style: "--share: #{share(@filter.all_count)}%" do %>
+            <span>All articles</span><span><%= @filter.all_count %></span>
+          <% end %>
+
+          <% @filter.topic_tree.each do |group| %>
+            <%= link_to filter_link(heading: group[:selected] ? nil : group[:heading], topic: nil),
+              class: "bar", data: { turbo_frame: "dashboard" },
+              "aria-pressed" => group[:selected].to_s,
+              "aria-expanded" => group[:expanded].to_s,
+              style: "--share: #{share(group[:count])}%" do %>
+              <span><%= group[:heading] %></span><span><%= group[:count] %></span>
+            <% end %>
+            <% if group[:expanded] && !group[:topics].empty? %>
+              <div class="subtopics">
+                <% group[:topics].each do |topic| %>
+                  <%= link_to filter_link(topic: topic[:selected] ? nil : topic[:name], heading: group[:heading]),
+                    class: "bar", data: { turbo_frame: "dashboard" },
+                    "aria-pressed" => topic[:selected].to_s,
+                    style: "--share: #{share(topic[:count])}%" do %>
+                    <span><%= topic[:name] %></span><span><%= topic[:count] %></span>
+                  <% end %>
+                <% end %>
+              </div>
+            <% end %>
+          <% end %>
+        </div>
+        </nav>
+
+        <h2 style="margin-top: 1.25rem">Date added</h2>
+        <label>From<input form="filter-form" id="date-from" name="date_from" type="date" value="<%= @filter.params_value(:date_from) %>" data-autosubmit></label>
+        <label>Through<input form="filter-form" id="date-through" name="date_through" type="date" value="<%= @filter.params_value(:date_through) %>" data-autosubmit></label>
+        <h2 style="margin-top: 1.25rem">Publication date</h2>
+        <label>Published from<input form="filter-form" id="published-from" name="published_from" type="date" value="<%= @filter.params_value(:published_from) %>" data-autosubmit></label>
+        <label>Published through<input form="filter-form" id="published-through" name="published_through" type="date" value="<%= @filter.params_value(:published_through) %>" data-autosubmit></label>
+        <label>Published by
+          <select form="filter-form" id="publisher" name="publisher" data-autosubmit>
+            <option value="">All</option>
+            <%= options_for_select(@filter.options("publisher").map { |value| [value, value] }, @filter.value("publisher")) %>
+          </select>
+        </label>
+        <label>Discovered via
+          <select form="filter-form" id="source" name="source" data-autosubmit>
+            <option value="">All</option>
+            <%= options_for_select(@filter.options("source").map { |value| [value, value] }, @filter.value("source")) %>
+          </select>
+        </label>
+        <label>Technical depth
+          <select form="filter-form" id="depth" name="depth" data-autosubmit>
+            <option value="">All</option>
+            <%= options_for_select(@filter.options("depth").map { |value| [value, value] }, @filter.value("depth")) %>
+          </select>
+        </label>
+        <p><%= link_to "Clear filters", filter_link(topic: nil, heading: nil, q: nil, date_preset: nil,
+          date_from: nil, date_through: nil, published_from: nil, published_through: nil,
+          publisher: nil, source: nil, depth: nil), data: { turbo_frame: "dashboard" } %></p>
+      </aside>
+
+      <section class="results" aria-labelledby="count">
+        <h2 id="count" aria-live="polite" tabindex="-1"><%= @filter.count_text %></h2>
+        <div id="articles">
+          <%= render partial: "article", collection: @filter.visible, as: :article %>
+          <% if @filter.visible.empty? %>
+            <div class="empty-state" role="status">
+              <h3>No articles match these filters.</h3>
+              <p>Try a broader search, a different date range, or another topic.</p>
+              <p><%= link_to "Clear filters", filter_link(topic: nil, heading: nil, q: nil, date_preset: nil,
+                date_from: nil, date_through: nil, published_from: nil, published_through: nil,
+                publisher: nil, source: nil, depth: nil), data: { turbo_frame: "dashboard" } %></p>
+            </div>
+          <% end %>
+        </div>
+      </section>
+    </div>
+
+    <%= render "version", version: @version %>
+  </turbo-frame>
+</main>
