@@ -16,7 +16,7 @@ concurrency:
 jobs:
   checks:
     runs-on: windows-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v6
       - uses: ruby/setup-ruby@v1
@@ -26,6 +26,18 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Cache disposable Neo4j distribution
+        uses: actions/cache@v4
+        with:
+          path: tmp/neo4j-cache
+          key: neo4j-test-${{ runner.os }}-5.26.0-jre-21.0.13
+      - name: Intake tests
+        shell: pwsh
+        run: node --test test/intake/fetch-hn.test.mjs
       - name: Check Ruby and JavaScript syntax
         shell: pwsh
         run: |
@@ -56,3 +68,6 @@ jobs:
           archive = request.get("/articles", host)
           abort "Expected HTTP 503 without Neo4j credentials, got #{archive.status}" unless archive.status == 503
           '@ | bundle exec ruby
+      - name: Repeat-import integration test
+        shell: pwsh
+        run: pwsh -NoProfile -File ./test/support/neo4j-test.ps1

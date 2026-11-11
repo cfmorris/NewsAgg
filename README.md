@@ -54,3 +54,27 @@ canonical URL adds a discovery link and reuses the original summary.
 
 The source pollers, automated classification, and scheduled imports are pending.
 The current queries use standard Cypher.
+
+## Tests
+
+The intake tests use Node's built-in test runner with recorded Hacker News
+responses. They never call the live Hacker News API.
+
+```powershell
+node --test test/intake/fetch-hn.test.mjs
+```
+
+The repeat-import integration test needs a throwaway Neo4j server. The wrapper
+downloads pinned Neo4j Community 5.26.0 and, when Java 21 is not available, a
+pinned Temurin JRE. It starts the server on `127.0.0.1:17687` (Bolt on 17688),
+runs the test, then stops the server and deletes the temporary directory.
+
+```powershell
+pwsh -NoProfile -File ./test/support/neo4j-test.ps1
+```
+
+The test refuses to run unless `NEO4J_TEST_DISPOSABLE=1` is set, the URL is
+loopback, and the HTTP port is not 7474. It never connects to an existing local
+database or reads local credentials; the wrapper generates a password for the
+disposable server. Add `-Keep` to inspect the `tmp/neo4j-test-*` directory after
+a failure. GitHub Actions runs both test commands in the required `checks` job.

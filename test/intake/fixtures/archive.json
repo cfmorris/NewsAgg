@@ -1,0 +1,22 @@
+[
+  {
+    "title": "Already collected by discussion id",
+    "url": "https://example.com/already-collected",
+    "discoveries": [
+      {
+        "source": "Hacker News",
+        "url": "https://news.ycombinator.com/item?id=1001"
+      }
+    ]
+  },
+  {
+    "title": "Tracked link",
+    "url": "https://example.com/tracked?utm_source=newsletter#section",
+    "discoveries": [
+      {
+        "source": "Reddit",
+        "url": "https://www.reddit.com/r/programming/comments/example"
+      }
+    ]
+  }
+]

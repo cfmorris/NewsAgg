@@ -1,26 +1,29 @@
 import { parseArgs } from "node:util";
 import { text } from "node:stream/consumers";
+import { pathToFileURL } from "node:url";
 
-const api = "https://hacker-news.firebaseio.com/v0";
-const { values } = parseArgs({
-  options: {
-    feed: { type: "string", default: "new" },
-    limit: { type: "string", default: "10" },
-    archive: { type: "string", default: "http://127.0.0.1:3000/articles" }
+export const API = "https://hacker-news.firebaseio.com/v0";
+const FEEDS = ["new", "top", "best"];
+const DEFAULT_ARCHIVE = "http://127.0.0.1:3000/articles";
+
+class UsageError extends Error {}
+
+function parseOptions(args) {
+  const { values } = parseArgs({
+    args,
+    options: {
+      feed: { type: "string", default: "new" },
+      limit: { type: "string", default: "10" },
+      archive: { type: "string", default: DEFAULT_ARCHIVE }
+    }
+  });
+
+  const limit = Number(values.limit);
+  if (!FEEDS.includes(values.feed) ||
+      !Number.isInteger(limit) || limit < 1 || limit > 500) {
+    throw new UsageError("Use --feed new|top|best and --limit 1–500.");
   }
-});
-
-const limit = Number(values.limit);
-if (!["new", "top", "best"].includes(values.feed) ||
-    !Number.isInteger(limit) || limit < 1 || limit > 500) {
-  console.error("Use --feed new|top|best and --limit 1–500.");
-  process.exit(2);
-}
-
-async function json(url) {
-  const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
-  if (!response.ok) throw new Error(`${url} returned HTTP ${response.status}`);
-  return response.json();
+  return { feed: values.feed, limit, archive: values.archive };
 }
 
 function urlKey(value) {
@@ -38,17 +41,29 @@ function urlKey(value) {
   }
 }
 
-async function candidates() {
-  const [archive, ids] = await Promise.all([
-    values.archive === "-" ? text(process.stdin).then(JSON.parse) : json(values.archive),
-    json(`${api}/${values.feed}stories.json`)
+async function json(url, fetchImpl) {
+  const response = await fetchImpl(url, { signal: AbortSignal.timeout(10_000) });
+  if (!response.ok) throw new Error(`${url} returned HTTP ${response.status}`);
+  return response.json();
+}
+
+export async function collectCandidates({
+  feed,
+  limit,
+  archive,
+  fetchImpl = globalThis.fetch,
+  readStdin = () => text(process.stdin)
+}) {
+  const [archiveRows, ids] = await Promise.all([
+    archive === "-" ? readStdin().then(JSON.parse) : json(archive, fetchImpl),
+    json(`${API}/${feed}stories.json`, fetchImpl)
   ]);
-  if (!Array.isArray(archive) || !Array.isArray(ids)) {
+  if (!Array.isArray(archiveRows) || !Array.isArray(ids)) {
     throw new Error("Expected article and Hacker News ID arrays.");
   }
 
-  const knownUrls = new Set(archive.map(article => urlKey(article.url)).filter(Boolean));
-  const knownDiscussions = new Set(archive.flatMap(article => (article.discoveries || [])
+  const knownUrls = new Set(archiveRows.map(article => urlKey(article.url)).filter(Boolean));
+  const knownDiscussions = new Set(archiveRows.flatMap(article => (article.discoveries || [])
     .filter(discovery => discovery.source === "Hacker News")
     .map(discovery => new URL(discovery.url).searchParams.get("id"))));
   const unseen = [...new Set(ids)].filter(id => Number.isSafeInteger(id) && !knownDiscussions.has(String(id)));
@@ -56,7 +71,7 @@ async function candidates() {
   const concurrency = 12;
   for (let offset = 0; offset < unseen.length && stories.length < limit; offset += concurrency) {
     const items = await Promise.all(unseen.slice(offset, offset + concurrency)
-      .map(id => json(`${api}/item/${id}.json`)));
+      .map(id => json(`${API}/item/${id}.json`, fetchImpl)));
     for (const item of items) {
       if (item?.type !== "story" || item.dead || item.deleted || !item.title) continue;
       const discoveryUrl = `https://news.ycombinator.com/item?id=${item.id}`;
@@ -78,10 +93,33 @@ async function candidates() {
   return stories;
 }
 
-try {
-  const stories = await candidates();
-  console.log(JSON.stringify(stories, null, 2));
-} catch (error) {
-  console.error(`Hacker News intake failed: ${error.message}`);
-  process.exitCode = 1;
+export async function main(args = process.argv.slice(2), {
+  fetchImpl = globalThis.fetch,
+  readStdin = () => text(process.stdin),
+  stdout = process.stdout,
+  stderr = process.stderr
+} = {}) {
+  let options;
+  try {
+    options = parseOptions(args);
+  } catch (error) {
+    if (error instanceof UsageError) {
+      stderr.write(`${error.message}\n`);
+      return 2;
+    }
+    throw error;
+  }
+
+  try {
+    const stories = await collectCandidates({ ...options, fetchImpl, readStdin });
+    stdout.write(`${JSON.stringify(stories, null, 2)}\n`);
+    return 0;
+  } catch (error) {
+    stderr.write(`Hacker News intake failed: ${error.message}\n`);
+    return 1;
+  }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  process.exitCode = await main();
 }
