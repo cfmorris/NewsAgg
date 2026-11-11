@@ -1,3 +1,7 @@
+require "time"
+
+require_relative "../services/auto_pull"
+
 module DashboardHelper
   # Builds a dashboard URL that keeps the current filters and applies overrides.
   def filter_link(overrides = {})
@@ -12,6 +16,20 @@ module DashboardHelper
   end
 
   def auto_pull_enabled?
-    Rails.root.join("tmp/auto-pull.enabled").file?
+    AutoPull.enabled?
+  end
+
+  def auto_pull_worker_state
+    AutoPull.worker_state
+  end
+
+  # "2026-11-11 17:30 UTC" for the last completed pull, or nil when none ran.
+  def auto_pull_last_run_text
+    timestamp = auto_pull_worker_state[:last_run_at]
+    return nil if timestamp.nil? || timestamp.to_s.empty?
+
+    Time.iso8601(timestamp.to_s).getlocal.strftime("%Y-%m-%d %H:%M:%S %Z")
+  rescue ArgumentError
+    timestamp.to_s
   end
 end

@@ -270,7 +270,17 @@ select option { background: var(--surface); color: var(--text) }
 
 /* Auto-pull switch ------------------------------------------------------- */
 
-#auto-pull-control { display: flex; align-self: end; align-items: center; min-height: 2.25rem; white-space: nowrap }
+#auto-pull-control { display: flex; align-self: end; align-items: center; gap: .75rem; min-height: 2.25rem; white-space: nowrap }
+
+.auto-pull-status {
+  color: var(--text-faint);
+  font-size: .75rem;
+  max-width: 26rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.auto-pull-status-error { color: var(--danger-text) }
 
 label.auto-pull {
   display: inline-flex;
