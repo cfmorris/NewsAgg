@@ -1,0 +1,26 @@
+{
+  "2001": {
+    "id": 2001,
+    "type": "story",
+    "title": "Archived fixture article",
+    "url": "https://news.example/archived",
+    "time": 1762800000,
+    "score": 40
+  },
+  "2002": {
+    "id": 2002,
+    "type": "story",
+    "title": "Fixture story with a hostile publisher",
+    "url": "https://news.example/story?utm_source=hn",
+    "time": 1762800060,
+    "score": 31
+  },
+  "2003": {
+    "id": 2003,
+    "type": "story",
+    "title": "Fixture story that fails once",
+    "url": "https://broken.example/fail",
+    "time": 1762800120,
+    "score": 12
+  }
+}

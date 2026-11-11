@@ -37,7 +37,7 @@ jobs:
           key: neo4j-test-${{ runner.os }}-5.26.0-jre-21.0.13
       - name: Intake tests
         shell: pwsh
-        run: node --test test/intake/fetch-hn.test.mjs
+        run: node --test test/intake/fetch-hn.test.mjs test/intake/ingest-hn.test.mjs
       - name: Check Ruby and JavaScript syntax
         shell: pwsh
         run: |
@@ -45,8 +45,10 @@ jobs:
             ruby -c $file
             if ($LASTEXITCODE) { exit $LASTEXITCODE }
           }
-          node --check bin/fetch-hn.mjs
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          foreach ($file in @('bin/fetch-hn.mjs', 'bin/ingest-hn.mjs') + @(Get-ChildItem lib/ingest -Filter *.mjs -Recurse | ForEach-Object FullName)) {
+            node --check $file
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          }
           $html = Get-Content -Raw -Encoding UTF8 news-dashboard.html
           $script = [regex]::Match($html, '(?s)<script>(.*?)</script>')
           if (!$script.Success) { throw 'Dashboard script is missing' }
