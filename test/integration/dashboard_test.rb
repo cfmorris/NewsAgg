@@ -35,8 +35,12 @@ def css_color(css, name)
   value
 end
 
+recent_timestamp = (Time.now.utc - 3600).iso8601
+older_timestamp = (Time.now.utc - (72 * 3600)).iso8601
+
 rows = [
   article(
+    "archive_timestamp" => recent_timestamp,
     "title" => "Rails renders the dashboard",
     "summary" => "Controllers and views now filter articles and count them on the server.",
     "publisher" => "Rails Press",
@@ -50,6 +54,8 @@ rows = [
     ]
   ),
   article(
+    "archive_date" => "2026-11-01",
+    "archive_timestamp" => older_timestamp,
     "title" => "A cluster observes itself",
     "summary" => "Kubernetes telemetry feeds a quieter operations dashboard.",
     "publisher" => "Ops Weekly",
@@ -121,6 +127,100 @@ TestReport.run do
     response = request.get("/?published_from=2026-10-31", host)
     assert(response.body.include?("1 article"), "expected one published article")
     assert(response.body.include?("A cluster observes itself"), "published article missing")
+  end
+
+  check "the date controls collapse into one block" do
+    response = request.get("/", host)
+    body = response.body
+    assert(!body.match?(/name="published_from"/), "published_from input still rendered")
+    assert(!body.match?(/name="published_through"/), "published_through input still rendered")
+    assert(!body.match?(/>Publication date</), "publication date heading still rendered")
+    assert(body.scan(/class="date-block"/).length == 1, "expected exactly one date block")
+    assert(body.scan(/name="date_preset"/).length == 1, "expected exactly one date preset control")
+    assert(body.include?("<summary"), "expected a disclosure for the custom date range")
+    assert(body.include?("Custom range"), "custom range disclosure label missing")
+    assert(body.match?(/name="date_from"/), "date_from input missing from the custom range")
+    assert(body.match?(/name="date_through"/), "date_through input missing from the custom range")
+  end
+
+  check "the custom range opens when a custom date is active" do
+    response = request.get("/?date_from=2026-11-10", host)
+    block = response.body[/<details[^>]*id="custom-range"[^>]*>/, 0].to_s
+    assert(!block.empty?, "custom range disclosure missing")
+    assert(block.include?("open"), "custom range should start open when a custom date is active")
+    assert(response.body.match?(/<summary aria-expanded="true">Custom range<\/summary>/),
+      "active disclosure should report aria-expanded=true")
+  end
+
+  check "topic navigation renders one flat level" do
+    response = request.get("/?heading=#{CGI.escape("Software and its engineering")}", host)
+    body = response.body
+    assert(!body.include?('class="subtopics"'), "nested subtopics container still rendered")
+    assert(body.match?(/class="bar heading-caption"/), "heading captions missing")
+    assert(body.match?(/class="bar topic"/), "flat topic row missing")
+    assert(body.include?("Software Engineering"), "topic row label missing")
+    assert(body.scan(/class="bar topic"/).length == 1, "expected exactly one topic row per topic")
+    assert(body.match?(/class="bar topic"[^>]*--share:/) || body.match?(/--share:[^"]*"[^>]*class="bar topic"/),
+      "topic rows lost their share bar")
+    assert(body.match?(/class="bar heading-caption"[^>]*aria-pressed="true"/) ||
+      body.match?(/aria-pressed="true"[^>]*class="bar heading-caption"/),
+      "selected heading caption is not pressed")
+  end
+
+  check "the panel summarises active filters" do
+    response = request.get("/?q=rails&depth=Deep+dive", host)
+    assert(response.body.include?('class="filter-count"'), "active filter count missing from the panel summary")
+    assert(response.body.include?("2 active"), "expected the summary to report two active filters")
+
+    clear = request.get("/", host)
+    assert(clear.body.include?("No filters active"), "summary should say when no filters are active")
+  end
+
+  check "date presets, ranges, topics and headings narrow the visible set" do
+    preset = request.get("/?date_preset=24", host)
+    assert(preset.body.include?("1 article"), "date preset did not narrow the set")
+    assert(preset.body.include?("Rails renders the dashboard"), "recent article missing from preset view")
+    assert(!preset.body.include?("A cluster observes itself"), "old article survived the date preset")
+
+    from = request.get("/?date_from=2026-11-10", host)
+    assert(from.body.include?("1 article"), "date_from did not narrow the set")
+    assert(from.body.include?("Rails renders the dashboard"), "date_from dropped the recent article")
+
+    through = request.get("/?date_through=2026-11-05", host)
+    assert(through.body.include?("1 article"), "date_through did not narrow the set")
+    assert(through.body.include?("A cluster observes itself"), "date_through dropped the older article")
+
+    topic = request.get("/?topic=#{CGI.escape("AI & ML")}", host)
+    assert(topic.body.include?("1 article · AI &amp; ML"), "topic selection not reflected in the count")
+
+    heading = request.get("/?heading=#{CGI.escape("Computer systems organization")}", host)
+    assert(heading.body.include?("1 article · Computer systems organization"), "heading selection not reflected in the count")
+  end
+
+  check "filter links keep aria-pressed and disclosures keep aria-expanded" do
+    response = request.get("/?heading=#{CGI.escape("Software and its engineering")}", host)
+    links = response.body.scan(/<a [^>]*class="bar[^"]*"[^>]*>/)
+    assert(links.length >= 3, "expected filter links in the panel")
+    links.each do |link|
+      assert(link.include?('aria-pressed='), "filter link missing aria-pressed: #{link}")
+    end
+    summaries = response.body.scan(/<summary[^>]*>/)
+    assert(summaries.length >= 2, "expected panel and custom-range disclosures")
+    summaries.each do |summary|
+      assert(summary.include?('aria-expanded='), "disclosure summary missing aria-expanded: #{summary}")
+    end
+  end
+
+  check "the panel stays scrollable and pinned above 900px" do
+    css = request.get("/dashboard.css", host).body
+    assert(css.match?(/aside\.filter-panel\s*\{[^}]*position:\s*sticky/m), "panel is not sticky")
+    assert(css.match?(/aside\.filter-panel\s*\{[^}]*max-height:\s*calc\(100vh - 2\.5rem\)/m), "panel has no viewport cap")
+    assert(css.match?(/aside\.filter-panel\s*\{[^}]*overflow-y:\s*auto/m), "panel does not scroll internally")
+    assert(css.match?(/aside\.filter-panel\s*\{[^}]*overscroll-behavior:\s*contain/m), "panel does not contain overscroll")
+    assert(css.match?(/@media \(max-width: 900px\)[\s\S]*?aside\.filter-panel\s*\{[^}]*position:\s*static/m),
+      "narrow panels should not be sticky")
+    assert(css.include?("min-height: 2.75rem"), "touch targets are not 44px at narrow widths")
+    assert(!css.include?(".subtopics"), "nested subtopic styling still present")
   end
 
   check "an empty result explains itself" do
