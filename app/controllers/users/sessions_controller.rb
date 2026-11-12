@@ -12,6 +12,7 @@
 # all still go through Devise exactly as before.
 module Users
   class SessionsController < Devise::SessionsController
+    include QuietWelcomeFlashes
     # What the password step leaves for the code step: which account is mid
     # sign-in, whether it asked to be remembered, and when it started. The
     # password itself is never kept.
@@ -116,7 +117,8 @@ module Users
       # cookie when the record carries the flag into sign_in.
       account.remember_me = challenge["remember_me"] if account.respond_to?(:remember_me=)
       sign_in(resource_name, account)
-      set_flash_message!(:notice, :signed_in)
+      # No notice: the dashboard itself is the confirmation. QuietWelcomeFlashes
+      # covers Devise's own sign-in and sign-out messages the same way.
       redirect_to after_sign_in_path_for(account)
     end
 

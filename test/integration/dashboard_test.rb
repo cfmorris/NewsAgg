@@ -154,6 +154,30 @@ TestReport.run do
     assert(!response.body.include?("Rails renders the dashboard"), "non-matching article still rendered")
   end
 
+  # The reader is meant to land on the archive, not on a title card above it.
+  # The four strings are the chrome this screen used to carry: the "News
+  # archive" eyebrow, the intro sentence, and Devise's two welcome notices.
+  check "the dashboard carries no welcome chrome above the archive" do
+    response = request.get("/dashboard", auth)
+    assert(response.ok?, "expected HTTP 200, got #{response.status}")
+
+    visible = response.body.gsub(/<[^>]*>/, " ")
+    ["News archive", "Browse the archive by subject", "Welcome!", "successfully"].each do |text|
+      assert(!visible.include?(text), "the dashboard still shows #{text.inspect}")
+    end
+  end
+
+  check "the search input is named without a visible label" do
+    response = request.get("/dashboard", auth)
+    input = response.body[/<input[^>]*\bid="search"[^>]*>/]
+    assert(input, "the dashboard has no search input")
+    assert(input.include?('aria-label="Search articles"'),
+           "the search input has no accessible name: #{input}")
+    assert(input.include?("data-autosubmit"), "the search input lost its autosubmit hook")
+    assert(!response.body.gsub(/<[^>]*>/, " ").include?("Search articles"),
+           "the visible 'Search articles' label is still rendered")
+  end
+
   check "publisher, source and depth facets filter together" do
     response = request.get("/dashboard?publisher=Ops+Weekly&source=Lobsters&depth=Technical+analysis", auth)
     assert(response.body.include?("1 article"), "expected one facet match")
@@ -565,6 +589,10 @@ TestReport.run do
     assert(response.body.include?("Could not load Neo4j"), "archive error message missing")
     assert(response.body.include?('class="notice notice-error"'), "archive error is not styled")
     assert(response.body.include?('role="alert"'), "archive error is not announced")
+    alert = response.body[/<p[^>]*role="alert"[^>]*>[^<]*Could not load Neo4j[^<]*<\/p>/]
+    assert(alert, "the outage is not the alert element: #{response.body[0, 600]}")
+    assert(!response.body.include?("Browse the archive by subject"),
+           "the default intro sentence came back")
     assert(response.body.include?("NewsAgg: Your media aggregator"), "dashboard heading missing")
   ensure
     Rails.application.config.x.archive_factory = -> { FakeArchive.new(rows) }

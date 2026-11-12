@@ -186,6 +186,16 @@ TestReport.run do
     assert(session.last_response.status == 302, "sign-in answered #{session.last_response.status}")
     assert(session.last_response["Location"].to_s.end_with?("/dashboard"),
            "sign-in redirected to #{session.last_response['Location']}")
+
+    # Landing on the archive is the confirmation, so there is no welcome notice
+    # over it.
+    session.follow_redirect!
+    body = session.last_response.body
+    assert(session.last_response.status == 200,
+           "the dashboard answered #{session.last_response.status} after sign-in")
+    ["Welcome!", "successfully"].each do |notice|
+      assert(!body.include?(notice), "signing in still shows #{notice.inspect}")
+    end
   end
 
   check "a guest sent back from the dashboard returns there after signing in" do
@@ -208,6 +218,14 @@ TestReport.run do
     assert(session.last_response.status == 302, "sign-up answered #{session.last_response.status}")
     assert(session.last_response["Location"].to_s.end_with?("/dashboard"),
            "sign-up redirected to #{session.last_response['Location']}")
+
+    session.follow_redirect!
+    body = session.last_response.body
+    assert(session.last_response.status == 200,
+           "the dashboard answered #{session.last_response.status} after sign-up")
+    ["Welcome!", "successfully"].each do |notice|
+      assert(!body.include?(notice), "signing up still shows #{notice.inspect}")
+    end
   end
 
   check "the static asset routes stay public" do
