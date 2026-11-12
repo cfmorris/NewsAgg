@@ -8,6 +8,7 @@ require_relative "deepseek_summarizer"
 require_relative "hacker_news_client"
 require_relative "import_records"
 require_relative "ingest_batch"
+require_relative "lobsters_client"
 require_relative "retry_store"
 require_relative "safe_fetcher"
 require_relative "source_gate"
@@ -95,6 +96,7 @@ class IngestionRunner
       summaries: result[:model_calls].to_i,
       cost_usd: @meter ? @meter.cost_usd : 0.0,
       new_stories: result[:records].length,
+      skipped_no_article: result[:skipped_no_article].to_i,
       dropped: report.size,
       drop_reasons: report.counts.transform_keys(&:to_s),
       stopped: result[:budget_stopped] ? :budget : nil,
@@ -102,8 +104,9 @@ class IngestionRunner
     }
     @out.puts JSON.pretty_generate(result[:records])
     @err.puts "Ingestion batch: #{result[:records].length} record(s), " \
-      "#{result[:skipped_archived]} already archived, #{failures.length} kept for retry, " \
-      "#{report.size} dropped by the source gate."
+      "#{result[:skipped_archived]} already archived, " \
+      "#{result[:skipped_no_article].to_i} discussion-only skipped, " \
+      "#{failures.length} kept for retry, #{report.size} dropped by the source gate."
     failures.empty? ? 0 : 1
   end
 
@@ -132,13 +135,23 @@ class IngestionRunner
   end
 
   def adapter_for(source)
-    if source.api? && hacker_news_api?(source.url)
+    return nil unless source.api?
+
+    if hacker_news_api?(source.url)
       HackerNewsClient.new(name: source.name, http: @http, api: source.url.to_s.chomp("/"))
+    elsif lobsters_api?(source.url)
+      LobstersClient.new(name: source.name, http: @http, feed_url: source.url.to_s)
     end
   end
 
   def hacker_news_api?(url)
     url.to_s.start_with?(HackerNewsClient::API)
+  end
+
+  def lobsters_api?(url)
+    URI.parse(url.to_s).host.to_s.downcase == URI.parse(LobstersClient::FEED_URL).host
+  rescue URI::InvalidURIError
+    false
   end
 
   def story_for(record)

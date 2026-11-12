@@ -143,6 +143,20 @@ provider_env = {
 TestReport.run do
   Dir.mktmpdir("newsagg-ingest-") do |directory|
     retry_path = File.join(directory, "retry.json")
+    # The Hacker News path is exercised against a registry that lists only
+    # Hacker News, so this suite does not depend on which sources the committed
+    # allowlist ships with.
+    allowlist_path = File.join(directory, "sources.yml")
+    File.write(allowlist_path, <<~YAML)
+      sources:
+        - id: hacker-news
+          name: Hacker News
+          kind: api
+          url: https://hacker-news.firebaseio.com/v0
+          max_items: 10
+          min_words: 40
+    YAML
+    registry = SourceRegistry.load(path: allowlist_path)
     http = FakeHttp.new(items)
     archive = DisposableArchive.new(archive_rows)
 
@@ -151,7 +165,7 @@ TestReport.run do
         archive: target_archive, retry_path: retry_path, http: target_http, fetcher: fetcher,
         summarizer: DeepseekSummarizer.new(env: provider_env, http: target_http),
         now: -> { Time.utc(2026, 11, 11, 12, 0, 0) },
-        out: StringIO.new, err: @last_err = StringIO.new, env: provider_env
+        out: StringIO.new, err: @last_err = StringIO.new, env: provider_env, registry: registry
       )
     end
 
@@ -276,7 +290,8 @@ TestReport.run do
     replay_runner = IngestionRunner.new(
       archive: archive, retry_path: completed_retry_path, http: http,
       fetcher: FixtureFetcher.new(article_html), summarizer: DeepseekSummarizer.new(env: provider_env, http: http),
-      now: -> { Time.utc(2026, 11, 11, 12, 0, 0) }, out: StringIO.new, err: StringIO.new, env: provider_env
+      now: -> { Time.utc(2026, 11, 11, 12, 0, 0) }, out: StringIO.new, err: StringIO.new,
+      env: provider_env, registry: registry
     )
     replay_code = replay_runner.run(feed: "new", limit: 5)
 
