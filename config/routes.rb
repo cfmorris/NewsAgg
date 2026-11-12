@@ -1,4 +1,6 @@
 Rails.application.routes.draw do
+  devise_for :users
+
   root "dashboard#show"
   get "/articles", to: "dashboard#articles"
   get "/dashboard/stream", to: "dashboard#stream"

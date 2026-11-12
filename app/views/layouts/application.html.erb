@@ -11,6 +11,13 @@
   <script src="/dashboard.js" defer></script>
 </head>
 <body>
+  <% if flash.any? %>
+    <div class="flash" role="status">
+      <% flash.each do |type, message| %>
+        <p class="flash-<%= type %>"><%= message %></p>
+      <% end %>
+    </div>
+  <% end %>
   <%= yield %>
 </body>
 </html>
