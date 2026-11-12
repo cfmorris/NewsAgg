@@ -1,0 +1,21 @@
+AllCops:
+  NewCops: enable
+  TargetRubyVersion: 4.0.9
+  Exclude:
+    - "db/schema.rb"
+    - "vendor/**/*"
+    - "tmp/**/*"
+    - "node_modules/**/*"
+    - "bin/**/*"
+
+Metrics/AbcSize:
+  Max: 35
+
+Metrics/BlockLength:
+  Max: 25
+
+Metrics/ClassLength:
+  Max: 200
+
+Metrics/MethodLength:
+  Max: 25
