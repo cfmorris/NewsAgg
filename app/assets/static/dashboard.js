@@ -393,4 +393,14 @@
   document.addEventListener("keydown", function (event) {
     if (event.key === "Escape") close();
   });
+
+  // A deep link (?auth=sign-in) opens the card the button would open. This is what
+  // makes /users/sign_in look like every other way into sign-in: the controller
+  // sends a direct visit here, and the landing page names the card it wants.
+  var autoload = document.querySelector("[data-auth-autoload]");
+  var wanted = autoload && autoload.getAttribute("data-auth-autoload");
+  if (wanted) {
+    var trigger = document.querySelector('[data-auth-overlay="' + wanted + '"]');
+    if (trigger) open(trigger);
+  }
 })();
