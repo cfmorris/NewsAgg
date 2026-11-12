@@ -17,6 +17,14 @@ Rails.application.routes.draw do
   # The public front door: no session, no store.
   root "landing#show"
 
+  # Static assets served by controllers; the landing and sign-in pages need them
+  # before a session exists. They are declared before /dashboard because
+  # "/dashboard" also matches "/dashboard.css" and "/dashboard.js" as a format
+  # suffix, and would otherwise swallow them into the HTML dashboard action.
+  get "/turbo.js", to: "dashboard#turbo"
+  get "/dashboard.js", to: "dashboard#dashboard_js"
+  get "/dashboard.css", to: "dashboard#dashboard_css"
+
   # The dashboard is a signed-in screen now.
   get "/dashboard", to: "dashboard#show"
 
@@ -33,10 +41,4 @@ Rails.application.routes.draw do
   get "/infographic", to: "infographic#show"
   get "/auto-pull", to: "dashboard#auto_pull", defaults: { format: :json }
   put "/auto-pull", to: "dashboard#update_auto_pull", defaults: { format: :json }
-
-  # Static assets served by controllers; the landing and sign-in pages need them
-  # before a session exists.
-  get "/turbo.js", to: "dashboard#turbo"
-  get "/dashboard.js", to: "dashboard#dashboard_js"
-  get "/dashboard.css", to: "dashboard#dashboard_css"
 end

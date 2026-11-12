@@ -14,7 +14,10 @@ class DashboardController < ApplicationController
   # before a session exists.
   skip_before_action :require_session!, only: [:turbo, :dashboard_js, :dashboard_css]
 
-  skip_forgery_protection only: :update_auto_pull
+  # The asset actions return static files for a plain GET, so they neither carry
+  # a CSRF token nor need the embedded-JavaScript origin check that rejects a
+  # .js response.
+  skip_forgery_protection only: [:update_auto_pull, :turbo, :dashboard_js, :dashboard_css]
 
   def show
     prepare_dashboard
@@ -67,15 +70,18 @@ class DashboardController < ApplicationController
   end
 
   def turbo
-    send_file Rails.root.join("public/turbo.js"), type: "application/javascript", disposition: "inline"
+    send_file Rails.root.join("public/turbo.js"),
+      type: "application/javascript; charset=utf-8", disposition: "inline"
   end
 
   def dashboard_js
-    send_file Rails.root.join("public/dashboard.js"), type: "application/javascript", disposition: "inline"
+    send_file Rails.root.join("public/dashboard.js"),
+      type: "application/javascript; charset=utf-8", disposition: "inline"
   end
 
   def dashboard_css
-    send_file Rails.root.join("public/dashboard.css"), type: "text/css", disposition: "inline"
+    send_file Rails.root.join("public/dashboard.css"),
+      type: "text/css; charset=utf-8", disposition: "inline"
   end
 
   private
