@@ -77,6 +77,9 @@ jobs:
       - name: Hidden articles integration test
         shell: pwsh
         run: bundle exec ruby test/integration/hidden_articles_test.rb
+      - name: Asset charset and static-shadowing integration test
+        shell: pwsh
+        run: bundle exec ruby test/integration/asset_charset_test.rb
       - name: Infographic integration test
         shell: pwsh
         run: bundle exec ruby test/integration/infographic_test.rb
