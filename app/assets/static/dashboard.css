@@ -1461,3 +1461,75 @@ table.admin-users td.admin-users-created { color: var(--text-muted) }
   background: var(--danger-bg);
 }
 .row-actions input[type="submit"][value="Disable"]:hover { border-color: var(--danger-text) }
+
+/* ---------------------------------------------------------------------------
+   Admin source list
+
+   Same table as the account list, plus the two things a source row has to say
+   at a glance: whether fetching is on, and what the score is. A paused source
+   reads as a warning (danger tokens, same as a disabled account), an enabled
+   one stays neutral so a healthy list is quiet. The quality column keeps a
+   fixed decimal width so scores line up down the column.
+   ------------------------------------------------------------------------- */
+
+.admin-sources-page { max-width: 1180px }
+
+table.admin-sources td.admin-source-quality,
+table.admin-sources td.admin-source-count {
+  font-variant-numeric: tabular-nums;
+}
+
+table.admin-sources td.admin-source-quality { font-weight: 600 }
+
+.admin-source-id {
+  display: block;
+  margin-top: .15rem;
+  color: var(--text-faint);
+  font-size: .72rem;
+  letter-spacing: .04em;
+}
+
+.admin-source-status {
+  display: inline-block;
+  padding: .12rem .5rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  font-size: .74rem;
+  letter-spacing: .04em;
+  color: var(--text-muted);
+  background: var(--surface-raised);
+}
+
+.admin-source-status-paused {
+  color: var(--danger-text);
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+}
+
+table.admin-sources td.admin-source-reason {
+  min-width: 18rem;
+  white-space: normal;
+  color: var(--text-body);
+}
+
+table.admin-sources td.admin-source-reason small {
+  display: block;
+  margin-top: .15rem;
+  color: var(--text-faint);
+  font-size: .72rem;
+}
+
+.admin-source-none { color: var(--text-faint) }
+
+.admin-empty {
+  margin: .2rem 0 1rem;
+  padding: .9rem 1rem;
+  color: var(--text-body);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+/* The console's compact copy of the list sits inside a section, so it drops the
+   page-level card and keeps the table's own rules. */
+table.console-sources { margin: .2rem 0 .6rem }

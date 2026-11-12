@@ -49,7 +49,11 @@ class SourceMaterializer
       "exclude_domains" => entry.exclude_domains.dup,
       "override" => !keys.empty?,
       "override_keys" => keys,
-      # No scoring input exists in config yet; the node keeps whatever score it
+      # The explicit registry `override: true`: exempts the source from the
+      # automatic pause. Kept apart from the derived `override` above, which
+      # reports that a setting departs from its default.
+      "pause_override" => entry.override?,
+      # No scoring input exists in config; the node keeps whatever score it
       # already has and starts at 0.0 when first created.
       "quality_score" => nil
     }

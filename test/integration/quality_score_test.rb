@@ -130,6 +130,12 @@ class RecordingArchive
 
   def recompute_source_costs; end
 
+  # Source scoring reads each source's scored articles from the archive; this
+  # stand-in has no source nodes, so the import path scores nothing.
+  def source_quality_inputs
+    []
+  end
+
   def import(records)
     records.each do |record|
       next if @rows.any? { |row| row["url"] == record["url"] }

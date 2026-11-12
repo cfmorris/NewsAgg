@@ -84,10 +84,10 @@ start a puller. Set `NEWSAGG_AUTO_PULL=0` to keep the web process from pulling.
 #### Source allowlist
 
 `config/sources.yml` is the single explicit list of ingest sources. Every entry
-declares `name`, `kind` (`rss` or `api`), `url`, `enabled`, `max_items`,
-`min_words`, `domains`/`exclude_domains`, and `owner` (null for the shared
-sources, an owner id for future per-owner paid ones). Hacker News and Lobsters
-are listed and enabled today.
+declares `name`, `kind` (`rss` or `api`), `url`, `enabled`, `override`,
+`max_items`, `min_words`, `domains`/`exclude_domains`, and `owner` (null for the
+shared sources, an owner id for future per-owner paid ones). Hacker News and
+Lobsters are listed and enabled today.
 
 The file is parsed and validated at boot: a missing file, unknown or missing
 `kind`, missing or non-http `url`, duplicate `name`, unknown key, or malformed
@@ -136,6 +136,51 @@ contributes nothing, and an article discovered twice by the same source counts
 once. Sources are matched without an `enabled` filter, so a source disabled in
 config keeps the historical cost of the articles it already contributed.
 `bin/recompute-source-costs` runs the same aggregation standalone as a backfill.
+
+#### Source score and auto-pause
+
+Each source is scored from its own articles, so "Hacker News" and a niche
+Substack are not judged alike just because both are listed. `quality_score` is
+the **decayed rolling average** of the source's article scores: in the list of
+its scored articles ordered newest first, the newest carries weight 1.0, the
+next 0.95, the next 0.95², and so on, and the score is the weighted mean. A
+source's score therefore follows its recent output — five good pieces after a
+long run of mediocre ones lift it — instead of being anchored by its whole
+history. `article_count` is the size of that population (scored articles only;
+an unscored legacy row neither drags the average down nor pads the count), and a
+source with no scored articles has no score at all rather than a zero. Both
+fields are recomputed from the articles after every import and by
+`bin/recompute-source-scores`, so a replay produces the same numbers.
+
+A source that is not worth paying for stops on its own. Once it has at least
+**5** scored articles and its score is **below 40**, the scoring pass sets
+`enabled = false` on its node and records why: `paused_at`, `paused_by = auto`,
+and a `pause_reason` such as `auto-paused: quality score 31.0 over 5 articles is
+below 40`. The pause is enforced before anything is fetched — the source is left
+out of the adapter map and the pre-fetch `SourceGate` refuses it with
+`reason=paused_source`. Two things keep the pause from being a trap:
+
+- **`override: true` in `config/sources.yml`** exempts a source from the pause
+  entirely, whatever it scores. It is materialised as `pause_override` and is a
+  different flag from the node's `override`/`override_keys`, which report config
+  departures.
+- **The admin console can undo it.** `/admin/sources` lists every source with
+  its status, decayed score, article count, accumulated cost and pause reason,
+  and offers `Resume` on a paused one. Resuming clears the pause and restores
+  what config says: a source still enabled in config fetches again on the next
+  run, and one disabled in config stays off (the flash message says which).
+  Nothing is ever deleted, so a resumed source keeps its articles, its score and
+  its cost. Resume buys the source another run, not an exemption: the score only
+  moves when it contributes new articles, so a resumed source that brings
+  nothing new is paused again by the pass that scores that run. `override: true`
+  is the way to keep a low-scoring source on indefinitely.
+
+Pausing is about money, not history: `cost_usd` keeps accumulating from the
+articles the source already contributed, and a queued retry that commits an
+article for a paused source still counts. A re-sync from config does not
+re-enable a paused source either — the config's own value is kept in
+`configured_enabled`, and the effective `enabled` is
+`configured_enabled AND not paused`.
 
 #### Article quality score
 
@@ -278,6 +323,7 @@ bundle exec ruby test/integration/dashboard_pagination_test.rb
 bundle exec ruby test/integration/infographic_test.rb
 bundle exec ruby test/integration/ingestion_test.rb
 bundle exec ruby test/integration/quality_score_test.rb
+bundle exec ruby test/integration/source_score_test.rb
 bundle exec ruby test/integration/long_form_test.rb
 bundle exec ruby test/integration/source_registry_test.rb
 bundle exec ruby test/acceptance/source_allowlist_acceptance_test.rb
@@ -318,7 +364,20 @@ carries the rubric, a stub provider returning 87 stores 87, 0 and 101 are clampe
 to 1 and 100 and logged, a missing or non-numeric score falls back to the
 documented default of 50 and is logged, a replayed import keeps the first score
 and cost, `GET /articles` carries both fields, the card shows the score, and a
-quality sort ranks mixed scored and unscored articles. The source registry test
+quality sort ranks mixed scored and unscored articles. The source score test pins
+the source-level policy: the decayed average matches the 0.95-per-article-age
+formula and follows recent output rather than the whole history, a source with
+no scored articles has no score, four low articles do not pause it while the
+fifth does (with the reason naming the score, the count and the threshold), an
+exactly-40 score is not below the floor, `override: true` loads as a boolean,
+defaults to false, refuses a non-boolean and prevents the pause, and the gate and
+adapter map both stop a paused source until the pause is cleared. The
+disposable-Neo4j source score test carries the same story through a real graph —
+scores and counts written on the nodes, the auto-pause at the fifth article with
+`paused_at`/`pause_reason`, the override keeping a 10-scoring source on, cost
+still accumulating after a pause, a config re-sync not undoing it, the admin
+console rendering the score and the pause reason, and `Resume` restoring fetching
+without losing an article. The source registry test
 loads the committed allowlist and proves
 every malformed case refuses to boot — unknown or missing kind, missing or
 non-http url, duplicate name, unknown key, bad types — and that an unlisted
@@ -338,10 +397,11 @@ dollar caps stopping a run mid-list, the local-day rollover, the `:config`
 latch, the 60s → 5m → 15m → 30m backoff with a half-open probe, zero-new-story
 success, exact usage pricing, and the policy state surviving a restart.
 
-The repeat-import integration test needs a throwaway Neo4j server. The wrapper
+The repeat-import, source materialisation, source cost and source score suites
+need a throwaway Neo4j server. The wrapper
 downloads pinned Neo4j Community 5.26.0 and, when Java 21 is not available, a
 pinned Temurin JRE. It starts the server on `127.0.0.1:17687` (Bolt on 17688),
-runs the test, then stops the server and deletes the temporary directory.
+runs the tests, then stops the server and deletes the temporary directory.
 
 ```powershell
 pwsh -NoProfile -File ./test/support/neo4j-test.ps1
@@ -351,8 +411,7 @@ The test refuses to run unless `NEO4J_TEST_DISPOSABLE=1` is set, the URL is
 loopback, and the HTTP port is not 7474. It never connects to an existing local
 database or reads local credentials; the wrapper generates a password for the
 disposable server. Add `-Keep` to inspect the `tmp/neo4j-test-*` directory after
-a failure. GitHub Actions runs all three test commands in the required `checks`
-job.
+a failure. GitHub Actions runs every test command in the required `checks` job.
 
 The `checks` job takes about two minutes. [docs/ci-performance.md](docs/ci-performance.md)
 records the per-step timings, the sharding/ubuntu options that were weighed, and

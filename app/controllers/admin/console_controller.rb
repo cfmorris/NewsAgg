@@ -4,6 +4,7 @@ module Admin
   class ConsoleController < BaseController
     def show
       @summary = User.console_summary
+      @listing = SourceListing.new
     end
   end
 end

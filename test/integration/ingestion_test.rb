@@ -40,6 +40,13 @@ class DisposableArchive
     @cost_recomputations = (@cost_recomputations || 0) + 1
   end
 
+  # Source scoring reads each source's scored articles from the archive; with no
+  # source nodes there is nothing to score, so the import path sees an empty
+  # input set and pauses nothing.
+  def source_quality_inputs
+    []
+  end
+
   def cost_recomputations
     @cost_recomputations || 0
   end
@@ -210,7 +217,8 @@ TestReport.run do
 
     check "a failed story is written to the retry file without secrets" do
       retry_entries = JSON.parse(File.read(retry_path))
-      assert(retry_entries.length == 1, "expected one retry entry")
+      assert(retry_entries.length == 1,
+        "expected one retry entry, got #{retry_entries.map { |entry| [entry.dig("story", "external_id"), entry["reason"]] }.inspect}")
       assert(retry_entries.first["story"]["external_id"] == "2003", "wrong retry story")
       assert(retry_entries.first["attempts"] == 1, "wrong attempt count")
       assert(retry_entries.first["reason"].include?("HTTP 503"), "retry reason missing the failure")

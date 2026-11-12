@@ -13,6 +13,7 @@ require_relative "retry_store"
 require_relative "safe_fetcher"
 require_relative "source_gate"
 require_relative "source_registry"
+require_relative "source_score"
 
 # Coordinates one or many ingestion passes for the background worker.
 #
@@ -53,8 +54,9 @@ class IngestionRunner
     retry_entries = @retry_store.read
     secrets = [@env["DEEPSEEK_API_KEY"], @env["NEO4J_PASSWORD"]]
     registry = @registry || SourceRegistry.current
-    gate = SourceGate.new(registry: registry)
-    adapters = @adapters || adapters_for(registry)
+    paused = paused_source_ids
+    gate = SourceGate.new(registry: registry, paused: paused)
+    adapters = @adapters || adapters_for(registry, paused: paused)
 
     batch = @batch || IngestBatch.new(
       adapters: adapters, gate: gate, fetcher: @fetcher,
@@ -111,9 +113,17 @@ class IngestionRunner
   end
 
   # One adapter per enabled allowlist entry. A source with no adapter yet is
-  # reported, never silently replaced by a built-in one.
-  def adapters_for(registry)
+  # reported, never silently replaced by a built-in one. A source the score has
+  # paused gets no adapter either, so a paused source is not even polled.
+  def adapters_for(registry, paused: [])
+    paused = Array(paused).map(&:to_s)
     registry.enabled.each_with_object({}) do |source, adapters|
+      if paused.include?(source.id)
+        @err.puts "source gate: source #{source.name.inspect} is paused (quality score below " \
+          "#{SourceScore::THRESHOLD}) and is not fetched"
+        next
+      end
+
       adapter = adapter_for(source)
       if adapter
         adapters[source.name] = adapter
@@ -125,6 +135,16 @@ class IngestionRunner
   end
 
   private
+
+  # The ids the score has paused. Reading them is deliberately part of a run:
+  # the gate and the adapter map both need the same set, and it must come from
+  # the archive rather than from a cached copy a re-enable would leave stale.
+  def paused_source_ids
+    # A test double that predates source scoring has no pause state.
+    return [] unless @archive.respond_to?(:paused_source_ids)
+
+    @archive.paused_source_ids
+  end
 
   # An empty allowlist runs nothing, so it must not need an LLM provider just
   # to discover there is nothing to do. Any real source still requires one.

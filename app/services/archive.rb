@@ -100,9 +100,17 @@ class Archive
   # Idempotent: MERGE on the id (backed by the news_source_id constraint)
   # means a repeated sync updates the same nodes instead of adding new ones.
   # Config-owned fields are set on every sync, so enabling or disabling a source
-  # in config is reflected on the node. The accumulated fields - article_count,
+  # in config is reflected on the node. The derived fields - article_count,
   # cost_usd and quality_score - are only seeded on create and are deliberately
-  # absent from the unconditional SET, so a re-import never wipes them.
+  # absent from the unconditional SET, so a re-sync never wipes them; they are
+  # recomputed from the articles by #recompute_source_costs and SourceScoring.
+  #
+  # `enabled` is the effective fetch state, not just a copy of the config: a
+  # source paused for a low score (paused_at set) stays off through a re-sync,
+  # and the config's own value is kept in `configured_enabled` so resuming knows
+  # what to restore. `pause_override` mirrors the registry's explicit
+  # `override: true`, which exempts a source from auto-pausing; it is a separate
+  # field from `override`/`override_keys`, which report config departures.
   def sync_sources(sources)
     return 0 if sources.nil? || sources.empty?
 
@@ -116,7 +124,9 @@ class Archive
       SET source.name = row.name,
           source.kind = row.kind,
           source.url = row.url,
-          source.enabled = row.enabled,
+          source.configured_enabled = row.enabled,
+          source.enabled = row.enabled AND (source.paused_at IS NULL),
+          source.pause_override = row.pause_override,
           source.override = row.override,
           source.override_keys = row.override_keys,
           source.max_items = row.max_items,
@@ -129,6 +139,119 @@ class Archive
       FOREACH (absent IN CASE WHEN row.owner IS NULL THEN [1] ELSE [] END |
         REMOVE source.owner)
       RETURN count(*) AS sources
+    CYPHER
+  end
+
+  # The input to a score recomputation: every materialised source with the
+  # quality scores of its articles, newest first.
+  #
+  # Only scored articles count. A source with no scored articles comes back with
+  # an empty list, so it has no score rather than a score of zero, and legacy
+  # rows written before article scoring existed neither drag an average down nor
+  # pad the count. An article discovered by the same source twice is counted
+  # once.
+  #
+  # "Newest" is the import time, with the published date as the tie-break: a
+  # whole batch imported in one statement shares one added_at, and only the
+  # publication order says which piece in it is the later one.
+  def source_quality_inputs
+    scores_by_name = Hash.new { |hash, key| hash[key] = {} }
+    query(<<~CYPHER).each do |row|
+      MATCH (article:NewsArticle)-[:DISCOVERED_VIA]->(discovery:NewsDiscovery)
+      WHERE article.quality_score IS NOT NULL
+      RETURN discovery.source AS name, article.url AS url,
+             article.quality_score AS score, toString(article.added_at) AS added_at
+      ORDER BY added_at DESC, coalesce(article.published_date, '') DESC, url
+    CYPHER
+      name = row["name"]
+      next if name.nil?
+
+      scores_by_name[name][row["url"]] ||= row["score"]
+    end
+
+    query(<<~CYPHER).map do |row|
+      MATCH (source:NewsSource)
+      RETURN source.id AS id, source.name AS name,
+             coalesce(source.pause_override, false) AS pause_override
+      ORDER BY source.id
+    CYPHER
+      {
+        "id" => row["id"],
+        "name" => row["name"],
+        "pause_override" => row["pause_override"],
+        # Discovery rows were read newest first, and Hash preserves insertion
+        # order, so this list is already ordered by article age.
+        "scores" => scores_by_name[row["name"]].values
+      }
+    end
+  end
+
+  # Writes the computed score and article count on every source. Only these two
+  # fields are touched: cost_usd is derived independently and a pause never
+  # deletes an article.
+  def write_source_scores(rows)
+    return 0 if rows.nil? || rows.empty?
+
+    rows = rows.map do |row|
+      {
+        "id" => row["id"],
+        "quality_score" => row["quality_score"],
+        "article_count" => row["article_count"]
+      }
+    end
+    query(<<~CYPHER, { rows: rows }).first.fetch("sources")
+      UNWIND $rows AS row
+      MATCH (source:NewsSource {id: row.id})
+      SET source.quality_score = row.quality_score,
+          source.article_count = row.article_count,
+          source.score_updated_at = datetime()
+      RETURN count(*) AS sources
+    CYPHER
+  end
+
+  # Pauses the sources the score says are not worth fetching: enabled=false plus
+  # the recorded reason. The articles stay, so the cost of what the source
+  # already contributed keeps accumulating. A node carrying pause_override stays
+  # on even when it reaches this method, so an explicit registry override cannot
+  # be undone by a stale decision.
+  def pause_sources(rows)
+    return 0 if rows.nil? || rows.empty?
+
+    query(<<~CYPHER, { rows: rows }).first.fetch("sources")
+      UNWIND $rows AS row
+      MATCH (source:NewsSource {id: row.id})
+      WHERE coalesce(source.pause_override, false) = false
+      SET source.enabled = false,
+          source.paused_at = datetime(),
+          source.paused_by = 'auto',
+          source.pause_reason = row.reason
+      RETURN count(*) AS sources
+    CYPHER
+  end
+
+  # Clears a pause, restoring the source to whatever config/sources.yml says.
+  # This is the admin console's undo: it re-enables fetching for a source that
+  # is still enabled in config, and leaves a source disabled in config disabled.
+  # Returns the node's state, or nil when there is no such source.
+  def resume_source(id)
+    rows = query(<<~CYPHER, { id: id.to_s })
+      MATCH (source:NewsSource {id: $id})
+      SET source.enabled = coalesce(source.configured_enabled, true),
+          source.resumed_at = datetime()
+      REMOVE source.paused_at, source.pause_reason, source.paused_by
+      RETURN source.id AS id, source.enabled AS enabled,
+             coalesce(source.configured_enabled, true) AS configured_enabled
+    CYPHER
+    rows.first
+  end
+
+  # The ids of sources currently paused, for the pre-fetch gate.
+  def paused_source_ids
+    query(<<~CYPHER).map { |row| row["id"] }
+      MATCH (source:NewsSource)
+      WHERE source.paused_at IS NOT NULL
+      RETURN source.id AS id
+      ORDER BY source.id
     CYPHER
   end
 
@@ -166,9 +289,14 @@ class Archive
       RETURN source.id AS id, source.name AS name, source.kind AS kind,
              source.url AS url,
              source.enabled AS enabled, source.owner AS owner,
+             source.configured_enabled AS configured_enabled,
              source.quality_score AS quality_score,
              source.article_count AS article_count, source.cost_usd AS cost_usd,
              source.override AS override, source.override_keys AS override_keys,
+             source.pause_override AS pause_override,
+             toString(source.paused_at) AS paused_at, source.pause_reason AS pause_reason,
+             source.paused_by AS paused_by,
+             toString(source.score_updated_at) AS score_updated_at,
              source.max_items AS max_items, source.min_words AS min_words,
              source.domains AS domains, source.exclude_domains AS exclude_domains,
              toString(source.synced_at) AS synced_at

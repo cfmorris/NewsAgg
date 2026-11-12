@@ -1,0 +1,25 @@
+#!/usr/bin/env ruby
+require_relative "../app/services/source_scoring"
+
+# Recomputes every source's decayed quality score and article count from the
+# articles it contributed, and pauses the sources that have fallen below the
+# floor.
+#
+# Safe to run at any time and any number of times: the score is derived from the
+# articles, so a rerun produces the same numbers. It is also the backfill for
+# sources whose articles were imported before source scoring existed. A pause
+# never deletes anything, and resuming from the admin console clears it.
+#
+# Costs are not touched here: NewsSource.cost_usd keeps accumulating in
+# bin/recompute-source-costs whether a source is enabled, paused or stopped.
+begin
+  outcome = SourceScoring.new.call
+rescue Archive::Unavailable => error
+  abort "The archive is unavailable: #{error.message}"
+end
+
+puts "Scored #{outcome.scored} source#{"s" unless outcome.scored == 1}"
+outcome.paused.each do |row|
+  puts "paused #{row["id"]}: #{row["reason"]}"
+end
+puts "No source was paused" if outcome.paused.empty?

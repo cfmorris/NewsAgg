@@ -1,0 +1,81 @@
+<main class="admin-sources-page" aria-labelledby="admin-sources-title">
+  <h1 id="admin-sources-title">Sources</h1>
+
+  <p class="admin-summary">
+    Every source in <code>config/sources.yml</code>, with the decayed quality score of the
+    articles it has contributed. A source with at least <%= SourceScore::MIN_ARTICLES %>
+    scored articles whose score falls below <%= SourceScore::THRESHOLD %> is paused
+    automatically; resuming it here turns fetching back on without touching its articles
+    or its accumulated cost.
+  </p>
+
+  <% if @listing.unavailable? %>
+    <p class="admin-empty" id="sources-unavailable" role="status">
+      The source registry could not be read from the archive (<%= @listing.error %>).
+      Source scores and pause reasons are unavailable until it reconnects.
+    </p>
+  <% elsif @listing.rows.empty? %>
+    <p class="admin-empty" id="sources-empty">
+      No source has been materialised yet. Sources appear here after an import syncs the
+      allowlist into the archive.
+    </p>
+  <% else %>
+    <div class="admin-users-card">
+      <table class="admin-users admin-sources">
+        <thead>
+          <tr>
+            <th scope="col">Source</th>
+            <th scope="col">Status</th>
+            <th scope="col">Quality</th>
+            <th scope="col">Articles</th>
+            <th scope="col">Cost</th>
+            <th scope="col">Pause reason</th>
+            <th scope="col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% @listing.rows.each do |source| %>
+            <tr id="source-<%= source["id"] %>" data-status="<%= source_status_label(source) %>">
+              <td class="admin-users-email">
+                <%= source["name"] %>
+                <small class="admin-source-id"><%= source["id"] %></small>
+              </td>
+              <td>
+                <span class="admin-source-status admin-source-status-<%= source_status_class(source) %>">
+                  <%= source_status_label(source) %>
+                </span>
+              </td>
+              <td class="admin-source-quality"><%= source_quality_label(source) %></td>
+              <td class="admin-source-count"><%= source["article_count"].to_i %></td>
+              <td class="admin-source-cost"><%= source_cost_label(source) %></td>
+              <td class="admin-source-reason">
+                <% if source_paused?(source) %>
+                  <%= source["pause_reason"] %>
+                  <small>since <%= source["paused_at"] %><%= " (#{source["paused_by"]})" if source["paused_by"] %></small>
+                <% else %>
+                  <span class="admin-source-none">—</span>
+                <% end %>
+              </td>
+              <td class="admin-users-actions">
+                <div class="row-actions">
+                  <% if source_paused?(source) %>
+                    <%= form_with url: resume_admin_source_path(source["id"]), method: :patch, local: true do %>
+                      <%= submit_tag "Resume", name: nil,
+                                     aria: { label: "Resume #{source["name"]}" } %>
+                    <% end %>
+                  <% else %>
+                    <span class="admin-source-none">—</span>
+                  <% end %>
+                </div>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% end %>
+
+  <p class="account-note">
+    <%= link_to "Back to the console", admin_root_path %>
+  </p>
+</main>

@@ -23,7 +23,7 @@ class SourceRegistry
   DEFAULT_MIN_WORDS = 0
   TOP_LEVEL_KEYS = %w[sources].freeze
   ENTRY_KEYS = %w[
-    id name kind url enabled max_items min_words domains exclude_domains owner
+    id name kind url enabled max_items min_words domains exclude_domains owner override
   ].freeze
   ID_PATTERN = /\A[a-z0-9]+(-[a-z0-9]+)*\z/
   DEFAULT_PATH = File.expand_path("../../config/sources.yml", __dir__)
@@ -33,7 +33,7 @@ class SourceRegistry
     attr_reader :id, :name, :kind, :url, :max_items, :min_words, :domains, :exclude_domains, :owner
 
     def initialize(id:, name:, kind:, url:, enabled:, max_items:, min_words:,
-      domains: [], exclude_domains: [], owner: nil)
+      domains: [], exclude_domains: [], owner: nil, override: false)
       @id = id
       @name = name
       @kind = kind
@@ -44,6 +44,7 @@ class SourceRegistry
       @domains = Array(domains).freeze
       @exclude_domains = Array(exclude_domains).freeze
       @owner = owner
+      @override = override == true
       freeze
     end
 
@@ -56,6 +57,14 @@ class SourceRegistry
 
     def enabled?
       @enabled
+    end
+
+    # True when the entry says `override: true`: the source is exempt from the
+    # automatic pause that a low quality score would otherwise trigger. It is
+    # not the same thing as the node's `override`/`override_keys` fields, which
+    # report that a setting departs from its default.
+    def override?
+      @override
     end
 
     def rss?
@@ -84,7 +93,7 @@ class SourceRegistry
         "name" => name, "kind" => kind, "url" => url, "enabled" => enabled?,
         "max_items" => max_items, "min_words" => min_words,
         "domains" => domains.dup, "exclude_domains" => exclude_domains.dup,
-        "owner" => owner
+        "owner" => owner, "override" => override?
       }
     end
 
@@ -279,7 +288,8 @@ class SourceRegistry
         min_words: validated_count(entry, index, "min_words", DEFAULT_MIN_WORDS, minimum: 0),
         domains: validated_domains(entry, index, "domains"),
         exclude_domains: validated_domains(entry, index, "exclude_domains"),
-        owner: validated_owner(entry, index)
+        owner: validated_owner(entry, index),
+        override: validated_boolean(entry, index, "override", false)
       )
     end
 
@@ -355,12 +365,18 @@ class SourceRegistry
     end
 
     def validated_enabled(entry, index)
-      return true unless entry.key?("enabled")
+      validated_boolean(entry, index, "enabled", true)
+    end
 
-      value = entry["enabled"]
+    # A true/false switch with a documented default. `enabled` and `override`
+    # share this validator so both refuse anything that is not a boolean.
+    def validated_boolean(entry, index, key, default)
+      return default unless entry.key?(key)
+
+      value = entry[key]
       return value if [true, false].include?(value)
 
-      fail_at(index, "enabled must be true or false (got #{describe(value)})")
+      fail_at(index, "#{key} must be true or false (got #{describe(value)})")
     end
 
     def validated_count(entry, index, key, default, minimum:)

@@ -14,6 +14,9 @@
 #   url              required, absolute http(s) feed or API base URL
 #   enabled          optional boolean, default true; false stops the source
 #                    contributing entirely
+#   override         optional boolean, default false; true exempts the source
+#                    from the automatic pause a low quality score triggers,
+#                    so it keeps fetching no matter how its articles score
 #   max_items        optional positive integer, default 25; most candidates the
 #                    source may contribute per run
 #   min_words        optional integer >= 0, default 0; shortest article text the

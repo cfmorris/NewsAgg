@@ -31,9 +31,56 @@
   <section class="account-section" id="console-sources" aria-labelledby="console-sources-title">
     <h2 id="console-sources-title">Sources</h2>
 
-    <p class="account-note" aria-disabled="true">
-      <strong>Not available yet.</strong>
-      Source management arrives with the source registry.
-    </p>
+    <% if @listing.unavailable? %>
+      <p class="account-note" id="console-sources-unavailable" role="status">
+        <strong>The archive is unavailable.</strong>
+        Source scores, article counts and pause reasons could not be read
+        (<%= @listing.error %>).
+      </p>
+      <p class="account-note"><%= link_to "Manage sources", admin_sources_path %></p>
+    <% elsif @listing.rows.empty? %>
+      <p class="account-note" id="console-sources-empty">
+        No source has been materialised yet. Sources appear here once an import
+        syncs <code>config/sources.yml</code> into the archive.
+      </p>
+      <p class="account-note"><%= link_to "Manage sources", admin_sources_path %></p>
+    <% else %>
+      <dl class="account-details">
+        <div class="account-detail">
+          <dt>Sources</dt>
+          <dd id="console-count-sources"><%= @listing.rows.length %></dd>
+        </div>
+        <div class="account-detail">
+          <dt>Paused by score</dt>
+          <dd id="console-count-sources-paused"><%= @listing.rows.count { |row| source_paused?(row) } %></dd>
+        </div>
+      </dl>
+
+      <table class="admin-users admin-sources console-sources">
+        <thead>
+          <tr>
+            <th scope="col">Source</th>
+            <th scope="col">Status</th>
+            <th scope="col">Quality</th>
+            <th scope="col">Articles</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% @listing.rows.each do |source| %>
+            <tr id="console-source-<%= source["id"] %>" data-status="<%= source_status_label(source) %>">
+              <td class="admin-users-email"><%= source["name"] %></td>
+              <td><%= source_status_label(source) %></td>
+              <td class="admin-source-quality"><%= source_quality_label(source) %></td>
+              <td class="admin-source-count"><%= source["article_count"].to_i %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+
+      <p class="account-note">
+        <%= link_to "Manage sources", admin_sources_path %> — scores, pause reasons,
+        and resuming a paused source.
+      </p>
+    <% end %>
   </section>
 </main>
