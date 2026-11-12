@@ -261,6 +261,27 @@ def sweep(board: str, profile: str, db: Path | None, ledger: Path | None, kanban
     return 0
 
 
+def utf8_stdout() -> None:
+    """Write UTF-8 whatever the console codepage is.
+
+    Windows runners default to cp1252, which turns the report's em dash into 0x97 and
+    breaks any reader that decodes the stream as UTF-8. Streams that are already UTF-8,
+    and streams that cannot be reconfigured (a StringIO or other replacement), are left
+    alone so the report still prints.
+    """
+    stream = sys.stdout
+    reconfigure = getattr(stream, "reconfigure", None)
+    if not callable(reconfigure):
+        return
+    encoding = (getattr(stream, "encoding", None) or "").lower().replace("_", "").replace("-", "")
+    if encoding == "utf8":
+        return
+    try:
+        reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, OSError, ValueError):
+        pass
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("task", nargs="?", help="kanban task id, e.g. t_69f3c047 (omit with --sweep)")
@@ -334,4 +355,5 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    utf8_stdout()
     sys.exit(main())

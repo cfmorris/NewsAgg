@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import subprocess
 import sys
@@ -12,6 +13,39 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "bin" / "kanban-usage.py"
+
+# Runs the reporter with sys.stdout replaced by a stream that has no reconfigure(),
+# then forwards the captured text to the real stdout as UTF-8 once the script exits.
+NO_RECONFIGURE_HARNESS = """
+import io, runpy, sys
+
+real = sys.stdout
+captured = io.StringIO()
+sys.stdout = captured
+sys.argv = [sys.argv[1], *sys.argv[2:]]
+status = 0
+try:
+    runpy.run_path(sys.argv[0], run_name="__main__")
+except SystemExit as exc:
+    status = exc.code if isinstance(exc.code, int) else 0
+finally:
+    sys.stdout = real
+
+data = captured.getvalue().encode("utf-8")
+if hasattr(real, "buffer"):
+    real.buffer.write(data)
+    real.buffer.flush()
+else:
+    real.write(captured.getvalue())
+sys.exit(status)
+"""
+
+
+def child_env(**overrides: str) -> dict:
+    """The child always speaks UTF-8 unless a test deliberately says otherwise."""
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+    env.update(overrides)
+    return env
 
 SCHEMA = """
 CREATE TABLE session_model_usage (
@@ -38,10 +72,17 @@ def make_db(path: Path, rows: list[tuple]) -> None:
     conn.close()
 
 
-def run_script(*args: str) -> subprocess.CompletedProcess:
+def run_script(*args: str, env: dict | None = None) -> subprocess.CompletedProcess:
     return subprocess.run(
         [sys.executable, str(SCRIPT), *args],
-        capture_output=True, text=True, encoding="utf-8",
+        capture_output=True, text=True, encoding="utf-8", env=env or child_env(),
+    )
+
+
+def run_script_bytes(*args: str, env: dict | None = None) -> subprocess.CompletedProcess:
+    """Capture raw bytes so the test, not the parent's locale, decides the encoding."""
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), *args], capture_output=True, env=env or child_env(),
     )
 
 
@@ -143,6 +184,38 @@ class KanbanUsageTest(unittest.TestCase):
 
         records = [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
         self.assertEqual([r["session_id"] for r in records], ["s5", "s6"])
+
+    def test_stdout_is_utf8_even_when_the_console_codepage_is_cp1252(self) -> None:
+        make_db(self.db, [
+            ("s7", "deepseek-flash", "", 2, 200, 100, 0, 0.001, "estimated", "official_docs_snapshot"),
+        ])
+
+        result = run_script_bytes("t_test", "--session-id", "s7", "--db", str(self.db),
+                                  env=child_env(PYTHONIOENCODING="cp1252"))
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        # Strict UTF-8 decode: a cp1252-encoded em dash (0x97) raises here.
+        text = result.stdout.decode("utf-8")
+        self.assertIn("### Agent usage — `t_test`", text)
+        self.assertIn(" · ", text)
+
+    def test_reports_when_stdout_cannot_be_reconfigured(self) -> None:
+        make_db(self.db, [
+            ("s8", "deepseek-flash", "", 1, 100, 50, 0, 0.0005, "estimated", "official_docs_snapshot"),
+        ])
+        harness = Path(self.tmp.name) / "harness.py"
+        harness.write_text(NO_RECONFIGURE_HARNESS, encoding="utf-8")
+
+        result = subprocess.run(
+            [sys.executable, str(harness), str(SCRIPT), "t_test", "--session-id", "s8",
+             "--db", str(self.db)],
+            capture_output=True, env=child_env(),
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        text = result.stdout.decode("utf-8")
+        self.assertIn("### Agent usage — `t_test`", text)
+        self.assertIn("| **Total** | **1** | **100** | **50** | **0** | **$0.0005** |", text)
 
 
 if __name__ == "__main__":
