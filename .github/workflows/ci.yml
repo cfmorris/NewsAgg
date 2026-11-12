@@ -68,6 +68,9 @@ jobs:
       - name: Account page integration test
         shell: pwsh
         run: bundle exec ruby test/integration/account_page_test.rb
+      - name: MFA end-to-end flow integration test
+        shell: pwsh
+        run: bundle exec ruby test/integration/mfa_flow_test.rb
       - name: Admin console integration test
         shell: pwsh
         run: bundle exec ruby test/integration/admin_console_test.rb
