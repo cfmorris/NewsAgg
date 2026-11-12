@@ -4,13 +4,19 @@ require "uri"
 require_relative "http_client"
 require_relative "url_key"
 
-# Reads the public Hacker News API and returns unseen story candidates.
+# Reads one Hacker News API feed and returns unseen story candidates.
+#
+# The registry name is injected: the adapter labels its candidates with the
+# allowlist entry that named it and never invents a source of its own.
 class HackerNewsClient
   API = "https://hacker-news.firebaseio.com/v0".freeze
   FEEDS = %w[new top best].freeze
   CONCURRENCY = 12
 
-  def initialize(http: HttpClient.new, api: API)
+  attr_reader :name, :api
+
+  def initialize(name:, http: HttpClient.new, api: API)
+    @name = name.to_s
     @http = http
     @api = api
   end
@@ -49,7 +55,7 @@ class HackerNewsClient
         stories << {
           "title" => item["title"],
           "url" => item["url"] || discovery_url,
-          "source" => "Hacker News",
+          "source" => name,
           "external_id" => item["id"].to_s,
           "discovery_url" => discovery_url,
           "submitted_at" => Time.at(item["time"].to_i).utc.iso8601,
@@ -68,7 +74,7 @@ class HackerNewsClient
       key = UrlKey.call(article["url"])
       known_urls << key if key
       Array(article["discoveries"]).each do |discovery|
-        next unless discovery.is_a?(Hash) && discovery["source"] == "Hacker News"
+        next unless discovery.is_a?(Hash) && discovery["source"] == name
         next unless discovery["url"].is_a?(String)
 
         id = URI.decode_www_form(URI.parse(discovery["url"]).query.to_s).to_h["id"]
