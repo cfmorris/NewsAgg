@@ -1,3 +1,5 @@
+ENV["RAILS_ENV"] = "test"
+
 require "cgi"
 require "json"
 require "rack/mock"
@@ -5,6 +7,7 @@ require "rack/mock"
 require_relative "../../config/environment"
 require_relative "../support/assertions"
 require_relative "../support/fake_archive"
+require_relative "../support/signed_in"
 
 include TestReport
 
@@ -117,11 +120,14 @@ rows = [
 
 request = Rack::MockRequest.new(Rails.application)
 host = { "HTTP_HOST" => "127.0.0.1:3000" }
+# The dashboard is behind the sign-in gate now; every request below carries the
+# cookie a signed-in reader would.
+auth = host.merge("HTTP_COOKIE" => sign_in_cookie)
 
 TestReport.run do
   check "the dashboard renders without an archive factory" do
     password = ENV.delete("NEO4J_PASSWORD")
-    response = request.get("/", host)
+    response = request.get("/dashboard", auth)
     assert(response.ok?, "expected HTTP 200, got #{response.status}")
     assert(response.body.include?("Could not load Neo4j"), "archive error missing")
   ensure
@@ -131,7 +137,7 @@ TestReport.run do
   Rails.application.config.x.archive_factory = -> { FakeArchive.new(rows) }
 
   check "the dashboard renders server-side counts and articles" do
-    response = request.get("/", host)
+    response = request.get("/dashboard", auth)
     assert(response.ok?, "expected HTTP 200, got #{response.status}")
     assert(response.body.include?("NewsAgg: Your media aggregator"), "dashboard heading missing")
     assert(response.body.include?("2 articles"), "expected a two-article count")
@@ -141,7 +147,7 @@ TestReport.run do
   end
 
   check "search narrows the article list and count" do
-    response = request.get("/?q=kubernetes", host)
+    response = request.get("/dashboard?q=kubernetes", auth)
     assert(response.ok?, "expected HTTP 200, got #{response.status}")
     assert(response.body.include?("1 article"), "expected one matching article")
     assert(response.body.include?("A cluster observes itself"), "matching article missing")
@@ -149,26 +155,26 @@ TestReport.run do
   end
 
   check "publisher, source and depth facets filter together" do
-    response = request.get("/?publisher=Ops+Weekly&source=Lobsters&depth=Technical+analysis", host)
+    response = request.get("/dashboard?publisher=Ops+Weekly&source=Lobsters&depth=Technical+analysis", auth)
     assert(response.body.include?("1 article"), "expected one facet match")
     assert(response.body.include?("A cluster observes itself"), "facet match missing")
   end
 
   check "topic links filter and report the selected topic in the count" do
-    response = request.get("/?topic=#{CGI.escape("AI & ML")}", host)
+    response = request.get("/dashboard?topic=#{CGI.escape("AI & ML")}", auth)
     assert(response.body.include?("1 article · AI &amp; ML"), "topic count label missing")
     assert(response.body.include?("Rails renders the dashboard"), "topic article missing")
     assert(!response.body.include?("A cluster observes itself"), "unrelated article rendered")
   end
 
   check "topic headings aggregate their unmapped children" do
-    response = request.get("/?heading=#{CGI.escape("Computer systems organization")}", host)
+    response = request.get("/dashboard?heading=#{CGI.escape("Computer systems organization")}", auth)
     assert(response.body.include?("1 article · Computer systems organization"), "heading count label missing")
     assert(response.body.include?("A cluster observes itself"), "heading article missing")
   end
 
   check "tag pills sit in the title row instead of their own row" do
-    response = request.get("/", host)
+    response = request.get("/dashboard", auth)
     card = card_for(response.body, "Rails renders the dashboard")
     heading = heading_of(card)
     assert(heading.include?("Software Engineering"), "topic pill missing from the h3 title row")
@@ -182,21 +188,21 @@ TestReport.run do
   end
 
   check "topic pills keep filtering the dashboard through the Turbo frame" do
-    response = request.get("/", host)
+    response = request.get("/dashboard", auth)
     card = card_for(response.body, "Rails renders the dashboard")
     pill = heading_of(card)[%r{<a [^>]*>AI &amp; ML</a>}]
     assert(pill, "topic pill missing from the title row")
     assert(pill.include?("topic=AI"), "topic pill no longer links to a topic filter: #{pill}")
     assert(pill.include?('aria-pressed="false"'), "unselected topic pill lost its pressed state")
 
-    selected = request.get("/?topic=#{CGI.escape("AI & ML")}", host)
+    selected = request.get("/dashboard?topic=#{CGI.escape("AI & ML")}", auth)
     selected_pill = heading_of(card_for(selected.body, "Rails renders the dashboard"))[%r{<a [^>]*>AI &amp; ML</a>}]
     assert(selected_pill, "selected topic pill missing from the title row")
     assert(selected_pill.include?('aria-pressed="true"'), "selected topic pill lost its pressed state")
   end
 
   check "the summary ends with the Original and discovery links inline" do
-    response = request.get("/", host)
+    response = request.get("/dashboard", auth)
     summary = paragraph_of(card_for(response.body, "Rails renders the dashboard"))
     assert(summary.include?("Controllers and views now filter articles and count them on the server."),
       "the full summary text is not rendered")
@@ -212,7 +218,7 @@ TestReport.run do
   end
 
   check "other discovery sources keep their own label inline" do
-    response = request.get("/", host)
+    response = request.get("/dashboard", auth)
     summary = paragraph_of(card_for(response.body, "A cluster observes itself"))
     assert(summary[%r{<a [^>]*>Lobsters</a>}], "Lobsters discovery is not labelled by its source name")
     assert(!summary.include?("HN discussion"), "Lobsters discovery is mislabelled as Hacker News")
@@ -228,7 +234,7 @@ TestReport.run do
         )
       ])
     }
-    response = request.get("/", host)
+    response = request.get("/dashboard", auth)
     summary = paragraph_of(card_for(response.body, "No discoveries here"))
     assert(summary[%r{<a [^>]*>Original</a>}], "Original link missing for an undiscovered article")
     assert(!summary.include?("HN discussion"), "an undiscovered article rendered a discussion link")
@@ -245,7 +251,7 @@ TestReport.run do
         )
       ])
     }
-    response = request.get("/", host)
+    response = request.get("/dashboard", auth)
     card = card_for(response.body, "An untagged article")
     assert(!card.include?('class="tags"'), "an empty tag container is still rendered")
     assert(heading_of(card).include?("An untagged article"), "title text missing from the heading")
@@ -262,7 +268,7 @@ TestReport.run do
           "url" => "https://example.test/silent", "discoveries" => [])
       ])
     }
-    response = request.get("/", host)
+    response = request.get("/dashboard", auth)
     assert(response.ok?, "expected HTTP 200, got #{response.status}")
     summary = paragraph_of(card_for(response.body, "A silent article"))
     assert(summary[%r{<a [^>]*>Original</a>}], "Original link missing when the summary is nil")
@@ -271,7 +277,7 @@ TestReport.run do
   end
 
   check "the compact card keeps type readable and the summary unclamped" do
-    css = request.get("/dashboard.css", host).body
+    css = request.get("/dashboard.css", auth).body
     meta_size = css[/article small \{[^}]*font-size:\s*([\d.]+)rem/, 1]
     tag_size = css[/\.tags a,[^{]*\{[^}]*font-size:\s*([\d.]+)rem/, 1]
     title_size = css[/\.article-title \{[^}]*font-size:\s*([\d.]+)rem/, 1]
@@ -286,13 +292,13 @@ TestReport.run do
   end
 
   check "the publication-date facet excludes undated articles" do
-    response = request.get("/?published_from=2026-10-31", host)
+    response = request.get("/dashboard?published_from=2026-10-31", auth)
     assert(response.body.include?("1 article"), "expected one published article")
     assert(response.body.include?("A cluster observes itself"), "published article missing")
   end
 
   check "the date controls collapse into one block" do
-    response = request.get("/", host)
+    response = request.get("/dashboard", auth)
     body = response.body
     assert(!body.match?(/name="published_from"/), "published_from input still rendered")
     assert(!body.match?(/name="published_through"/), "published_through input still rendered")
@@ -306,7 +312,7 @@ TestReport.run do
   end
 
   check "the custom range opens when a custom date is active" do
-    response = request.get("/?date_from=2026-11-10", host)
+    response = request.get("/dashboard?date_from=2026-11-10", auth)
     block = response.body[/<details[^>]*id="custom-range"[^>]*>/, 0].to_s
     assert(!block.empty?, "custom range disclosure missing")
     assert(block.include?("open"), "custom range should start open when a custom date is active")
@@ -315,7 +321,7 @@ TestReport.run do
   end
 
   check "topic navigation renders one flat level" do
-    response = request.get("/?heading=#{CGI.escape("Software and its engineering")}", host)
+    response = request.get("/dashboard?heading=#{CGI.escape("Software and its engineering")}", auth)
     body = response.body
     assert(!body.include?('class="subtopics"'), "nested subtopics container still rendered")
     assert(body.match?(/class="bar heading-caption"/), "heading captions missing")
@@ -330,37 +336,37 @@ TestReport.run do
   end
 
   check "the panel summarises active filters" do
-    response = request.get("/?q=rails&depth=Deep+dive", host)
+    response = request.get("/dashboard?q=rails&depth=Deep+dive", auth)
     assert(response.body.include?('class="filter-count"'), "active filter count missing from the panel summary")
     assert(response.body.include?("2 active"), "expected the summary to report two active filters")
 
-    clear = request.get("/", host)
+    clear = request.get("/dashboard", auth)
     assert(clear.body.include?("No filters active"), "summary should say when no filters are active")
   end
 
   check "date presets, ranges, topics and headings narrow the visible set" do
-    preset = request.get("/?date_preset=24", host)
+    preset = request.get("/dashboard?date_preset=24", auth)
     assert(preset.body.include?("1 article"), "date preset did not narrow the set")
     assert(preset.body.include?("Rails renders the dashboard"), "recent article missing from preset view")
     assert(!preset.body.include?("A cluster observes itself"), "old article survived the date preset")
 
-    from = request.get("/?date_from=2026-11-10", host)
+    from = request.get("/dashboard?date_from=2026-11-10", auth)
     assert(from.body.include?("1 article"), "date_from did not narrow the set")
     assert(from.body.include?("Rails renders the dashboard"), "date_from dropped the recent article")
 
-    through = request.get("/?date_through=2026-11-05", host)
+    through = request.get("/dashboard?date_through=2026-11-05", auth)
     assert(through.body.include?("1 article"), "date_through did not narrow the set")
     assert(through.body.include?("A cluster observes itself"), "date_through dropped the older article")
 
-    topic = request.get("/?topic=#{CGI.escape("AI & ML")}", host)
+    topic = request.get("/dashboard?topic=#{CGI.escape("AI & ML")}", auth)
     assert(topic.body.include?("1 article · AI &amp; ML"), "topic selection not reflected in the count")
 
-    heading = request.get("/?heading=#{CGI.escape("Computer systems organization")}", host)
+    heading = request.get("/dashboard?heading=#{CGI.escape("Computer systems organization")}", auth)
     assert(heading.body.include?("1 article · Computer systems organization"), "heading selection not reflected in the count")
   end
 
   check "filter links keep aria-pressed and disclosures keep aria-expanded" do
-    response = request.get("/?heading=#{CGI.escape("Software and its engineering")}", host)
+    response = request.get("/dashboard?heading=#{CGI.escape("Software and its engineering")}", auth)
     links = response.body.scan(/<a [^>]*class="bar[^"]*"[^>]*>/)
     assert(links.length >= 3, "expected filter links in the panel")
     links.each do |link|
@@ -374,8 +380,8 @@ TestReport.run do
   end
 
   check "deselecting a topic returns to all articles while keeping the other filters" do
-    response = request.get("/?topic=#{CGI.escape("AI & ML")}&heading=#{CGI.escape("Computing methodologies")}" \
-      "&q=rails&publisher=#{CGI.escape("Rails Press")}&date_preset=72", host)
+    response = request.get("/dashboard?topic=#{CGI.escape("AI & ML")}&heading=#{CGI.escape("Computing methodologies")}" \
+      "&q=rails&publisher=#{CGI.escape("Rails Press")}&date_preset=72", auth)
     href = filter_href(response.body, "bar topic", "true")
     assert(href, "selected topic link missing")
     query = query_of(href)
@@ -387,7 +393,7 @@ TestReport.run do
   end
 
   check "selecting a topic still narrows it to the topic and its heading" do
-    response = request.get("/?heading=#{CGI.escape("Computing methodologies")}&q=rails", host)
+    response = request.get("/dashboard?heading=#{CGI.escape("Computing methodologies")}&q=rails", auth)
     links = response.body.scan(/<a [^>]*>.*?<\/a>/m).select do |anchor|
       anchor.include?('class="bar topic"') && anchor.include?("AI &amp; ML")
     end
@@ -400,7 +406,7 @@ TestReport.run do
   end
 
   check "deselecting a heading returns to all articles and keeps the other filters" do
-    response = request.get("/?heading=#{CGI.escape("Software and its engineering")}&q=rails&publisher=#{CGI.escape("Rails Press")}", host)
+    response = request.get("/dashboard?heading=#{CGI.escape("Software and its engineering")}&q=rails&publisher=#{CGI.escape("Rails Press")}", auth)
     href = filter_href(response.body, "bar heading-caption", "true")
     assert(href, "selected heading link missing")
     query = query_of(href)
@@ -411,7 +417,7 @@ TestReport.run do
   end
 
   check "deselecting an article tag returns to all articles and keeps the other filters" do
-    response = request.get("/?topic=#{CGI.escape("AI & ML")}&heading=#{CGI.escape("Computing methodologies")}&q=rails", host)
+    response = request.get("/dashboard?topic=#{CGI.escape("AI & ML")}&heading=#{CGI.escape("Computing methodologies")}&q=rails", auth)
     href = filter_href(response.body, "tag", "true")
     assert(href, "selected article tag link missing")
     query = query_of(href)
@@ -421,26 +427,26 @@ TestReport.run do
   end
 
   check "the filters panel opens for active filters and exposes its state hook" do
-    active = request.get("/?q=rails", host).body[/<details class="filters-disclosure"[^>]*>/]
+    active = request.get("/dashboard?q=rails", auth).body[/<details class="filters-disclosure"[^>]*>/]
     assert(active, "filters disclosure missing")
     assert(active.match?(/\sopen[\s>]/), "panel should start open when a filter is active")
     key = active[/data-filters-state-key="([^"]+)"/, 1]
     assert(key && !key.empty?, "filters disclosure exposes no state storage key")
 
-    idle = request.get("/", host).body[/<details class="filters-disclosure"[^>]*>/]
+    idle = request.get("/dashboard", auth).body[/<details class="filters-disclosure"[^>]*>/]
     assert(idle, "filters disclosure missing")
     assert(!idle.match?(/\sopen[\s>]/), "panel should start closed when no filter is active")
   end
 
   check "clear filters still drops every filter" do
-    response = request.get("/?q=rails&topic=#{CGI.escape("AI & ML")}&publisher=#{CGI.escape("Rails Press")}", host)
+    response = request.get("/dashboard?q=rails&topic=#{CGI.escape("AI & ML")}&publisher=#{CGI.escape("Rails Press")}", auth)
     anchor = response.body.scan(/<a [^>]*>Clear filters<\/a>/).first
     assert(anchor, "clear filters link missing")
-    assert(anchor.include?('href="/"'), "clear filters should link to a bare root path: #{anchor}")
+    assert(anchor.include?('href="/dashboard"'), "clear filters should link to the bare dashboard path: #{anchor}")
   end
 
   check "the panel stays scrollable and pinned above 900px" do
-    css = request.get("/dashboard.css", host).body
+    css = request.get("/dashboard.css", auth).body
     assert(css.match?(/aside\.filter-panel\s*\{[^}]*position:\s*sticky/m), "panel is not sticky")
     assert(css.match?(/aside\.filter-panel\s*\{[^}]*max-height:\s*calc\(100vh - 2\.5rem\)/m), "panel has no viewport cap")
     assert(css.match?(/aside\.filter-panel\s*\{[^}]*overflow-y:\s*auto/m), "panel does not scroll internally")
@@ -452,7 +458,7 @@ TestReport.run do
   end
 
   check "an empty result explains itself" do
-    response = request.get("/?q=nothing-matches-this", host)
+    response = request.get("/dashboard?q=nothing-matches-this", auth)
     assert(response.body.include?("0 articles"), "expected a zero count")
     assert(response.body.include?("No articles match these filters."), "empty-state message missing")
     assert(response.body.include?('class="empty-state"'), "empty state is not styled")
@@ -460,7 +466,7 @@ TestReport.run do
   end
 
   check "the dashboard ships one permanent night theme" do
-    response = request.get("/", host)
+    response = request.get("/dashboard", auth)
     assert(response.body.include?('data-theme="night"'), "night theme marker missing")
     assert(response.body.include?('href="/dashboard.css"'), "night stylesheet link missing")
     assert(response.body.include?('name="color-scheme" content="dark"'), "dark color-scheme hint missing")
@@ -468,7 +474,7 @@ TestReport.run do
   end
 
   check "the stylesheet is served as a dark CSS document" do
-    response = request.get("/dashboard.css", host)
+    response = request.get("/dashboard.css", auth)
     assert(response.ok?, "expected HTTP 200, got #{response.status}")
     assert(response["content-type"].to_s.include?("text/css"), "expected a CSS content type")
     assert(response.body.include?("color-scheme: dark"), "expected a dark color scheme")
@@ -477,7 +483,7 @@ TestReport.run do
   end
 
   check "the night palette keeps text, controls and focus readable" do
-    css = request.get("/dashboard.css", host).body
+    css = request.get("/dashboard.css", auth).body
     surface = css_color(css, "surface")
     assert(contrast_ratio(css_color(css, "text"), surface) >= 7, "body text contrast too low")
     assert(contrast_ratio(css_color(css, "text-muted"), surface) >= 4.5, "muted text contrast too low")
@@ -489,28 +495,28 @@ TestReport.run do
   end
 
   check "the Turbo stream publishes an archive version and honors ETags" do
-    first = request.get("/dashboard/stream", host)
+    first = request.get("/dashboard/stream", auth)
     assert(first.ok?, "expected HTTP 200, got #{first.status}")
     assert(first["content-type"].to_s.include?("turbo-stream"), "expected a turbo-stream response")
     assert(first.body.include?("archive-version"), "version target missing")
     etag = first["ETag"]
     assert(!etag.to_s.empty?, "expected an ETag")
-    second = request.get("/dashboard/stream", host.merge("HTTP_IF_NONE_MATCH" => etag))
+    second = request.get("/dashboard/stream", auth.merge("HTTP_IF_NONE_MATCH" => etag))
     assert(second.status == 304, "expected HTTP 304, got #{second.status}")
   end
 
   check "Auto-pull reads and writes its flag through the Rails endpoint" do
-    enable = request.put("/auto-pull", host.merge(
+    enable = request.put("/auto-pull", auth.merge(
       "CONTENT_TYPE" => "application/json",
       "HTTP_ORIGIN" => "http://127.0.0.1:3000",
       input: JSON.generate(enabled: true)
     ))
     assert(enable.status == 200, "enable failed with #{enable.status}")
     assert(JSON.parse(enable.body)["enabled"] == true, "flag was not enabled")
-    page = request.get("/", host)
+    page = request.get("/dashboard", auth)
     assert(page.body.match?(/id="auto-pull"[^>]*checked/m), "toggle did not render checked")
 
-    disable = request.put("/auto-pull", host.merge(
+    disable = request.put("/auto-pull", auth.merge(
       "CONTENT_TYPE" => "application/json",
       "HTTP_ORIGIN" => "http://127.0.0.1:3000",
       input: JSON.generate(enabled: false)
@@ -533,7 +539,7 @@ TestReport.run do
     )
     Rails.application.config.x.archive_factory = -> { FakeArchive.new([priced, legacy]) }
 
-    response = request.get("/articles", host)
+    response = request.get("/articles", auth)
     assert(response.ok?, "expected HTTP 200, got #{response.status}")
     payload = JSON.parse(response.body)
     priced_row = payload.find { |row| row["url"] == "https://example.test/priced" }
@@ -554,7 +560,7 @@ TestReport.run do
 
   check "an unavailable archive still renders the dashboard shell" do
     Rails.application.config.x.archive_factory = -> { UnavailableArchive.new }
-    response = request.get("/", host)
+    response = request.get("/dashboard", auth)
     assert(response.ok?, "expected HTTP 200, got #{response.status}")
     assert(response.body.include?("Could not load Neo4j"), "archive error message missing")
     assert(response.body.include?('class="notice notice-error"'), "archive error is not styled")

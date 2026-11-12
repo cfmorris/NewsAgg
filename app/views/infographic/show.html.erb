@@ -5,7 +5,7 @@
     <p class="broadsheet-edition">
       Edition of
       <time datetime="<%= @digest.edition_date %>"><%= @digest.edition_date || "an undated day" %></time>
-      <span class="broadsheet-nav"><a href="/">Back to the dashboard</a></span>
+      <span class="broadsheet-nav"><a href="/dashboard">Back to the dashboard</a></span>
     </p>
     <dl class="broadsheet-counts">
       <div><dt>Articles</dt><dd><%= pluralize(@digest.article_count, "article") %></dd></div>

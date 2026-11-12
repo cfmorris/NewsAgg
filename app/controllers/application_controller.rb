@@ -1,7 +1,39 @@
 class ApplicationController < ActionController::Base
   layout "application"
 
+  # Every screen needs a session; the landing page and the Devise screens opt
+  # out of this gate themselves.
+  before_action :require_session!
+
   helper_method :current_actor
+
+  # A guest is sent to sign-in and brought back to where they were going. The
+  # data endpoints (/articles, /auto-pull, /dashboard/stream) default to the
+  # JSON format, so a fetch() caller gets 401 instead of a redirect it would
+  # silently follow into the sign-in page.
+  def require_session!
+    return true if user_signed_in?
+    # Devise's own screens manage authentication themselves: signing in and
+    # registering are exactly what a guest is allowed to do.
+    return true if devise_controller?
+
+    if request.format.json?
+      render json: { error: "unauthorized" }, status: :unauthorized
+    else
+      store_location_for(:user, request.fullpath) if request.get?
+      redirect_to new_user_session_path
+    end
+  end
+
+  # Devise asks these after authenticating. The landing page is never the
+  # destination: signing in goes to the dashboard, or back to a stashed path.
+  def after_sign_in_path_for(_resource)
+    stored_location_for(:user) || dashboard_path
+  end
+
+  def after_sign_up_path_for(_resource)
+    dashboard_path
+  end
 
   protected
 

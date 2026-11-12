@@ -7,8 +7,12 @@ require_relative "../services/auto_pull"
 require_relative "../services/auto_pull_supervisor"
 require_relative "../services/dashboard_filter"
 
-class DashboardController < ActionController::Base
+class DashboardController < ApplicationController
   layout "application"
+
+  # The three asset actions serve files the landing and sign-in pages need
+  # before a session exists.
+  skip_before_action :require_session!, only: [:turbo, :dashboard_js, :dashboard_css]
 
   skip_forgery_protection only: :update_auto_pull
 

@@ -903,3 +903,39 @@ turbo-frame[busy] #count {
   .broadsheet-edition { flex-direction: column; gap: .2rem }
   .broadsheet-nav { margin-left: 0 }
 }
+
+/* The public landing page: one heading, one sentence, two ways in. */
+.landing {
+  max-width: 46rem;
+  padding-top: clamp(3rem, 12vh, 8rem);
+}
+.landing-lede {
+  max-width: 38rem;
+  color: var(--text-body);
+  font: 400 clamp(1.02rem, 1.6vw, 1.2rem)/1.6 Georgia, "Times New Roman", serif;
+}
+.landing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .75rem;
+  margin-top: 1.8rem;
+}
+.landing-action {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: .55rem 1.15rem;
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: none;
+}
+.landing-action:hover { background: var(--surface-hover); border-color: var(--accent) }
+.landing-action:last-child {
+  border-color: var(--accent-fill);
+  background: var(--accent-fill);
+  color: var(--on-accent);
+}
+.landing-action:last-child:hover { background: var(--accent-fill-hover) }

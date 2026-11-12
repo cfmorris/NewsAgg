@@ -1,0 +1,16 @@
+<main class="landing" aria-labelledby="landing-title">
+  <small id="edition">News aggregator</small>
+  <h1 id="landing-title">NewsAgg: Your media aggregator</h1>
+  <p class="landing-lede">Browse the archive by subject, publisher, discovery source, or technical depth.</p>
+
+  <% if user_signed_in? %>
+    <p class="landing-actions">
+      <%= link_to "Go to dashboard", dashboard_path, class: "landing-action" %>
+    </p>
+  <% else %>
+    <p class="landing-actions">
+      <%= link_to "Sign in", new_user_session_path, class: "landing-action" %>
+      <%= link_to "Create account", new_user_registration_path, class: "landing-action" %>
+    </p>
+  <% end %>
+</main>

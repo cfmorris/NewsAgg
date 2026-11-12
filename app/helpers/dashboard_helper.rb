@@ -7,7 +7,7 @@ module DashboardHelper
   def filter_link(overrides = {})
     query = request.query_parameters.merge(overrides.transform_keys(&:to_s))
     query = query.reject { |_key, value| value.nil? || value.to_s.empty? }
-    query.empty? ? "/" : "/?#{query.to_query}"
+    query.empty? ? dashboard_path : "#{dashboard_path}?#{query.to_query}"
   end
 
   def share(total)

@@ -1,8 +1,11 @@
+ENV["RAILS_ENV"] = "test"
+
 require "rack/mock"
 
 require_relative "../../config/environment"
 require_relative "../support/assertions"
 require_relative "../support/fake_archive"
+require_relative "../support/signed_in"
 
 include TestReport
 
@@ -107,12 +110,15 @@ rows = [
 
 request = Rack::MockRequest.new(Rails.application)
 host = { "HTTP_HOST" => "127.0.0.1:3000" }
+# The infographic is behind the sign-in gate now; every request below carries
+# the cookie a signed-in reader would.
+auth = host.merge("HTTP_COOKIE" => sign_in_cookie)
 
 TestReport.run do
   Rails.application.config.x.archive_factory = -> { FakeArchive.new(rows) }
 
   check "the infographic renders a masthead with the edition and counts" do
-    response = request.get("/infographic", host)
+    response = request.get("/infographic", auth)
     assert(response.ok?, "expected HTTP 200, got #{response.status}")
     body = response.body
     assert(body.match?(%r{<h1[^>]*>[^<]*Archive Broadsheet}), "masthead h1 missing")
@@ -124,7 +130,7 @@ TestReport.run do
   end
 
   check "five topic columns carry counts and headlines, the rest become briefs" do
-    body = request.get("/infographic", host).body
+    body = request.get("/infographic", auth).body
     columns = body.scan(/<section class="topic-column"[\s\S]*?<\/section>/)
     assert(columns.length == 5, "expected five topic columns, got #{columns.length}")
 
@@ -152,7 +158,7 @@ TestReport.run do
   end
 
   check "the depth block reports every depth value and its total" do
-    body = request.get("/infographic", host).body
+    body = request.get("/infographic", auth).body
     section = body[/<section class="depth-section"[\s\S]*?<\/section>/]
     assert(!section.nil?, "depth section missing")
     assert(section.include?("Technical analysis"), "Technical analysis missing from depth block")
@@ -164,7 +170,7 @@ TestReport.run do
   end
 
   check "the publisher strip separates repeat publishers from the single-article tail" do
-    body = request.get("/infographic", host).body
+    body = request.get("/infographic", auth).body
     section = body[/<section class="publisher-section"[\s\S]*?<\/section>/]
     assert(!section.nil?, "publisher section missing")
     named = section[/<ul class="named-publishers"[\s\S]*?<\/ul>/]
@@ -180,7 +186,7 @@ TestReport.run do
   end
 
   check "the dateline names the oldest article and its publication year" do
-    body = request.get("/infographic", host).body
+    body = request.get("/infographic", auth).body
     dateline = body[/<[^>]*class="dateline[^"]*"[\s\S]*?<\/p>/]
     assert(!dateline.nil?, "dateline callout missing")
     assert(dateline.include?("Fiber reaches the home"), "oldest article missing from the dateline")
@@ -188,13 +194,13 @@ TestReport.run do
   end
 
   check "an untagged article lands in a catch-all section" do
-    body = request.get("/infographic", host).body
+    body = request.get("/infographic", auth).body
     assert(body.include?('id="catch-all"'), "catch-all section missing")
     assert(body.include?("Untagged oddity"), "untagged article vanished from the page")
   end
 
   check "binary publisher and title bytes are scrubbed instead of raising" do
-    response = request.get("/infographic", host)
+    response = request.get("/infographic", auth)
     assert(response.ok?, "expected HTTP 200, got #{response.status}")
     body = response.body
     assert(body.valid_encoding?, "response body is not valid UTF-8")
@@ -204,7 +210,7 @@ TestReport.run do
 
   check "an empty archive renders a composed no-edition state" do
     Rails.application.config.x.archive_factory = -> { FakeArchive.new([]) }
-    response = request.get("/infographic", host)
+    response = request.get("/infographic", auth)
     assert(response.ok?, "expected HTTP 200, got #{response.status}")
     assert(response.body.include?("No edition today"), "empty state missing")
     assert(response.body.include?("Archive Broadsheet"), "masthead missing from the empty state")
@@ -214,7 +220,7 @@ TestReport.run do
   end
 
   check "the infographic headings stay hierarchical and the stylesheet stays readable" do
-    body = request.get("/infographic", host).body
+    body = request.get("/infographic", auth).body
     assert(body.match?(%r{<h1[^>]*>}), "no h1 masthead")
     h2_count = body.scan(%r{<h2[^>]*>}).length
     assert(h2_count >= 4, "expected an h2 per section, got #{h2_count}")
