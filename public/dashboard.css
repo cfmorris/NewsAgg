@@ -94,6 +94,105 @@ a:hover { color: var(--accent-bright); text-decoration-color: currentColor }
 
 ::selection { background: #2b4a86; color: #fff }
 
+/* Top bar ----------------------------------------------------------------
+   Sits above every screen in normal flow (never over the flash or the page).
+   The account area is a wrapping flex row, so below ~700px it drops under the
+   title instead of overflowing, and it needs no JavaScript to stay reachable. */
+
+.topbar {
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--surface-sunken) 0%, rgba(5, 10, 23, .94) 100%);
+}
+
+.topbar-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .4rem 1.25rem;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: .7rem clamp(1rem, 2.6vw, 1.6rem);
+}
+
+.topbar-title {
+  min-width: 0;
+  color: #f6f8fd;
+  font: 600 1.05rem/1.25 Georgia, "Times New Roman", serif;
+  letter-spacing: -.01em;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.topbar-title:hover { color: var(--accent-bright); text-decoration: underline }
+
+.topbar-account {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .3rem .9rem;
+  margin-left: auto;
+  min-width: 0;
+}
+
+.account-link {
+  padding: .28rem .5rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--accent);
+  font: 600 .85rem/1.4 "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  text-decoration: none;
+}
+.account-link:hover {
+  color: var(--accent-bright);
+  border-color: var(--border-strong);
+  background: var(--surface-raised);
+}
+
+.account-email { color: var(--text-body); font-size: .85rem; overflow-wrap: anywhere }
+
+.account-role {
+  padding: .1rem .5rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.account-sign-out-form { display: inline; margin: 0 }
+.account-sign-out { cursor: pointer }
+
+/* Flash ------------------------------------------------------------------ */
+
+.flash {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 clamp(1rem, 2.6vw, 1.6rem);
+}
+.flash p {
+  margin: .9rem 0 0;
+  padding: .75rem 1rem;
+  border: 1px solid var(--border-strong);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--text-body);
+}
+.flash .flash-alert,
+.flash .flash-error {
+  border-color: var(--danger-border);
+  border-left-color: var(--danger-text);
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}
+
+
 /* Focus ------------------------------------------------------------------ */
 
 :where(a, button, input, select, summary, [tabindex]):focus-visible {
@@ -536,6 +635,11 @@ turbo-frame[busy] #count {
 }
 
 @media (max-width: 700px) {
+  /* The account area drops under the title and wraps; nothing is hidden and no
+     JavaScript is needed to reach the menu. */
+  .topbar-inner { flex-direction: column; align-items: flex-start; gap: .35rem }
+  .topbar-account { width: 100%; margin-left: 0; justify-content: flex-start; gap: .25rem .65rem }
+
   main { padding: 1.5rem 1rem 3rem }
   .quick-filters { grid-template-columns: 1fr; gap: .75rem }
   #auto-pull-control { justify-content: flex-start }
