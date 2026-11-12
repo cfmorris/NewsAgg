@@ -1,0 +1,12 @@
+<%# The floating sign-in card. Hidden without JavaScript so the two links above
+    keep doing the whole job; dashboard.js reveals it and loads the matching
+    Devise screen into the frame. The frame is sized for the compact card the
+    embedded render prints (roughly 380x520). %>
+<div class="auth-overlay" id="auth-overlay" hidden>
+  <div class="auth-overlay-dialog" role="dialog" aria-modal="true" aria-labelledby="auth-overlay-title">
+    <button type="button" class="auth-overlay-close" data-auth-overlay-close aria-label="Close">&#215;</button>
+    <h2 class="auth-overlay-title" id="auth-overlay-title">Sign in</h2>
+    <iframe class="auth-overlay-frame" id="auth-overlay-frame"
+            title="Sign in to NewsAgg" src="about:blank"></iframe>
+  </div>
+</div>

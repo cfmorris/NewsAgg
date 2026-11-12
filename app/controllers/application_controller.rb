@@ -5,7 +5,7 @@ class ApplicationController < ActionController::Base
   # out of this gate themselves.
   before_action :require_session!
 
-  helper_method :current_actor
+  helper_method :current_actor, :embedded_auth?, :auth_path_options
 
   # A guest is sent to sign-in and brought back to where they were going. The
   # data endpoints (/articles, /auto-pull, /dashboard/stream) default to the
@@ -33,6 +33,20 @@ class ApplicationController < ActionController::Base
 
   def after_sign_up_path_for(_resource)
     dashboard_path
+  end
+
+  # The landing page's sign-in overlay loads the Devise screens in a 380px-wide
+  # iframe with ?embedded=1. That render drops the top bar and prints a compact
+  # card instead, with the same form, CSRF token and error rendering as the
+  # full page. The marker only means anything on a Devise screen.
+  def embedded_auth?
+    devise_controller? && params[:embedded].present?
+  end
+
+  # Keeps the marker on a form's action, so a failed attempt re-renders inside
+  # the frame instead of falling back to the full page.
+  def auth_path_options
+    embedded_auth? ? { embedded: 1 } : {}
   end
 
   protected

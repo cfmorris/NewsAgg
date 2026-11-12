@@ -9,33 +9,47 @@
   <link rel="stylesheet" href="/dashboard.css">
   <script src="/turbo.js" defer></script>
   <script src="/dashboard.js" defer></script>
+  <% if user_signed_in? && !embedded_auth? %>
+    <%# The landing page's sign-in overlay frames the app's own pages. Once the
+        frame reaches a signed-in screen, the top window takes over: a dashboard
+        squeezed into a 380px card is not where the reader belongs. The embedded
+        Devise screens opt out (they are the form, not the app). %>
+    <script>
+      (function () {
+        if (window.self === window.top) return;
+        try { window.top.location.replace("<%= dashboard_path %>"); } catch (_) {}
+      })();
+    </script>
+  <% end %>
 </head>
-<body>
-  <%# Every screen carries the bar: the product title on the left, the account
-      menu on the right. It works without JavaScript - the menu is a wrapping
-      flex row, not a dropdown. %>
-  <header class="topbar">
-    <div class="topbar-inner">
-      <%= link_to "NewsAgg: Your media aggregator", root_path, class: "topbar-title" %>
-      <nav class="topbar-account" aria-label="Account">
-        <% if user_signed_in? %>
-          <span class="account-email"><%= current_user.email %></span>
-          <span class="account-role"><%= role_label(current_user.role) %></span>
-          <% if route_helper_defined?(:account_path) %>
-            <%= link_to "Profile", account_path, class: "account-link" %>
+<body<%= raw(' class="auth-embedded"') if embedded_auth? %>>
+  <% unless embedded_auth? %>
+    <%# Every screen carries the bar: the product title on the left, the account
+        menu on the right. It works without JavaScript - the menu is a wrapping
+        flex row, not a dropdown. %>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <%= link_to "NewsAgg: Your media aggregator", root_path, class: "topbar-title" %>
+        <nav class="topbar-account" aria-label="Account">
+          <% if user_signed_in? %>
+            <span class="account-email"><%= current_user.email %></span>
+            <span class="account-role"><%= role_label(current_user.role) %></span>
+            <% if route_helper_defined?(:account_path) %>
+              <%= link_to "Profile", account_path, class: "account-link" %>
+            <% end %>
+            <% if (current_user.admin? || current_user.super_admin?) && route_helper_defined?(:admin_root_path) %>
+              <%= link_to "Admin console", admin_root_path, class: "account-link" %>
+            <% end %>
+            <%= button_to "Sign out", destroy_user_session_path, method: :delete,
+              class: "account-link account-sign-out", form: { class: "account-sign-out-form" } %>
+          <% else %>
+            <%= link_to "Sign in", new_user_session_path, class: "account-link" %>
+            <%= link_to "Create account", new_user_registration_path, class: "account-link" %>
           <% end %>
-          <% if (current_user.admin? || current_user.super_admin?) && route_helper_defined?(:admin_root_path) %>
-            <%= link_to "Admin console", admin_root_path, class: "account-link" %>
-          <% end %>
-          <%= button_to "Sign out", destroy_user_session_path, method: :delete,
-            class: "account-link account-sign-out", form: { class: "account-sign-out-form" } %>
-        <% else %>
-          <%= link_to "Sign in", new_user_session_path, class: "account-link" %>
-          <%= link_to "Create account", new_user_registration_path, class: "account-link" %>
-        <% end %>
-      </nav>
-    </div>
-  </header>
+        </nav>
+      </div>
+    </header>
+  <% end %>
   <% if flash.any? %>
     <div class="flash" role="status">
       <% flash.each do |type, message| %>
@@ -43,6 +57,11 @@
       <% end %>
     </div>
   <% end %>
-  <%= yield %>
+  <% if embedded_auth? %>
+    <%# Same theme, no chrome: a card sized for the landing page's overlay. %>
+    <main class="auth-card"><%= yield %></main>
+  <% else %>
+    <%= yield %>
+  <% end %>
 </body>
 </html>

@@ -1119,3 +1119,146 @@ turbo-frame[busy] #count {
 @media (max-width: 620px) {
   .account-details { grid-template-columns: 1fr }
 }
+
+/* The landing page's sign-in overlay ---------------------------------------
+   The landing page's two calls to action float a dialog over the page and load
+   the Devise screen into a frame, so the form keeps its own CSRF token and its
+   own error rendering. Everything below reuses the app's tokens: the same
+   surface, border, radius and shadow as the other cards, and the same control
+   styling the account page already uses. */
+
+.auth-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+  background: rgba(2, 6, 18, .72);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+
+/* The dialog is for JavaScript only: without it the links navigate. */
+.auth-overlay[hidden] { display: none }
+
+.auth-overlay-dialog {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(380px, 100%);
+  /* On a short window the card shrinks and the frame scrolls inside itself,
+     rather than the dialog running off the top and bottom of the screen. */
+  max-height: calc(100vh - 2.5rem);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+/* The frame carries the visible heading ("Log in" / "Sign up"); this one only
+   names the dialog for assistive technology. */
+.auth-overlay-title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.auth-overlay-close {
+  position: absolute;
+  top: .45rem;
+  right: .45rem;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  line-height: 1;
+}
+.auth-overlay-close:hover { background: var(--surface-hover); border-color: var(--border-strong); color: var(--text) }
+
+.auth-overlay-frame {
+  display: block;
+  width: 100%;
+  height: 520px;
+  max-height: calc(100vh - 2.5rem);
+  border: 0;
+  background: var(--surface);
+  color-scheme: dark;
+}
+
+body.auth-overlay-open { overflow: hidden }
+
+.auth-overlay-close:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px }
+
+/* The embedded render inside the frame: no top bar, no page chrome, just one
+   compact card with the same fields, token and errors as the full page. */
+body.auth-embedded { background-image: none; background-color: var(--surface) }
+
+.auth-card {
+  max-width: 100%;
+  margin: 0;
+  padding: 1.15rem 1.2rem 1.4rem;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+}
+
+.auth-card h2 { margin-top: 0 }
+.auth-card .field { margin-bottom: .35rem }
+
+/* The global control rule stretches every input to 100% wide; a checkbox and
+   its label stay on one line together. */
+.auth-card input[type="checkbox"] {
+  display: inline-block;
+  width: auto;
+  min-height: 0;
+  margin: 0 .45rem 0 0;
+  vertical-align: middle;
+  accent-color: var(--accent);
+}
+.auth-card input[type="checkbox"] + label {
+  display: inline-block;
+  margin: 0;
+  font-weight: 400;
+  vertical-align: middle;
+}
+
+.auth-card .actions { margin-top: 1.15rem }
+.auth-card .actions input[type="submit"] {
+  width: 100%;
+  padding: .55rem .9rem;
+  border-color: var(--accent-fill);
+  background: var(--accent-fill);
+  color: var(--on-accent);
+  font-weight: 600;
+  cursor: pointer;
+}
+.auth-card .actions input[type="submit"]:hover { background: var(--accent-fill-hover); border-color: var(--accent-fill-hover) }
+
+/* Devise's error list is plain markup; give it the app's danger treatment. */
+.auth-card #error_explanation {
+  margin: .2rem 0 1rem;
+  padding: .65rem .85rem;
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-sm);
+  color: var(--danger-text);
+  font-size: .85rem;
+}
+.auth-card #error_explanation h2 { margin: 0 0 .3rem; color: var(--danger-text); font-size: .8rem }
+.auth-card #error_explanation ul { margin: 0; padding-left: 1.1rem }
+.auth-card #error_explanation li { margin: .1rem 0 }

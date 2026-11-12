@@ -142,6 +142,7 @@ database:
 ```powershell
 bundle exec ruby test/integration/sign_in_gate_test.rb
 bundle exec ruby test/integration/top_bar_test.rb
+bundle exec ruby test/integration/auth_overlay_test.rb
 bundle exec ruby test/integration/asset_charset_test.rb
 bundle exec ruby test/integration/dashboard_test.rb
 bundle exec ruby test/integration/infographic_test.rb
@@ -156,7 +157,11 @@ instead of a redirect, signing in and signing up land on `/dashboard`, and a
 guest sent back from a gated screen returns to it after signing in. The top-bar
 test covers the account menu in both states, the Profile and Admin console links
 appearing as soon as their routes exist, the single copy of the product title,
-and the Devise sign-in form still submitting through the layout. The asset
+and the Devise sign-in form still submitting through the layout. The auth
+overlay test covers the landing page's floating sign-in: both triggers keep an
+href fallback, the embedded render inside the frame drops the top bar for a
+compact card carrying the same form, and a wrong password re-renders its error
+in the frame. The asset
 charset test checks that `/dashboard.css`, `/dashboard.js` and `/turbo.js`
 declare UTF-8 and that the stylesheet's glyphs still reach the client as the
 same UTF-8 bytes.
