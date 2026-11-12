@@ -4,5 +4,7 @@
 /tmp/
 .env
 .env.*
+__pycache__/
 /config/master.key
 /config/initializers/secret_token.rb
+/.worktrees/

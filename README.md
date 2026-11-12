@@ -175,3 +175,52 @@ database or reads local credentials; the wrapper generates a password for the
 disposable server. Add `-Keep` to inspect the `tmp/neo4j-test-*` directory after
 a failure. GitHub Actions runs all three test commands in the required `checks`
 job.
+
+## Hermes Kanban development
+
+The local `newsagg` Hermes board uses the existing gateway and DeepSeek Flash.
+The `newsagg` profile handles implementation and review. The `newsaggdebug`
+profile is for explicit escalation. Each card gets a Git worktree based on the
+selected ref and a one-shot worker with a 20-minute runtime cap.
+
+From PowerShell in this checkout, put the expected behavior and relevant test
+command in a task file, then run:
+
+```powershell
+git fetch origin main
+.\bin\submit-kanban.ps1 -Title 'Fix the dashboard toggle' -TaskFile .\task.md
+hermes kanban --board newsagg list
+hermes kanban --board newsagg show <card-id>
+```
+
+For review, pass `-Mode review -Ref <commit-or-branch>` and identify the diff
+base in the task file. Pass `-Mode debug` for a harder investigation. The
+gateway dispatches queued cards. Implementers leave local commits for review,
+and reviewers report findings without editing. Push and open the PR after
+checking the result. GitHub still runs the required checks.
+
+## Agent usage and cost
+
+`bin/submit-kanban.ps1` records token usage after it creates a card, and
+`bin/kanban-usage.py` reports it on demand. The reporter reads the card's
+`worker_session_id` from `hermes kanban runs <card> --json`, opens the profile's
+`state.db`, and sums the `session_model_usage` rows for that session into a
+markdown table with a totals row, the model, and the pricing source:
+
+```bash
+python bin/kanban-usage.py <card-id>
+python bin/kanban-usage.py <card-id> --markdown usage.md --json usage.json
+python bin/kanban-usage.py --sweep --ledger tmp/usage/ledger.jsonl --kanban-comment
+```
+
+Usage stays on this machine. `--ledger` appends one JSON line per
+`(task, session_id)` to a git-ignored JSONL file, and `--kanban-comment` stores
+the table on the card in the board's own SQLite, skipping cards that already
+carry an `### Agent usage` heading. `--sweep` catches up every finished card on
+the board and skips cards with no worker session. GitHub receives no spend data
+unless a PR comment is requested explicitly with `--comment-pr <n>`; nothing
+else in the tooling touches GitHub.
+
+Token counts are exact. The dollar column is an estimate from the provider's
+pricing snapshot, so a run whose rows have `cost_status` other than `estimated`
+prints a warning instead of pretending the cost is known.
