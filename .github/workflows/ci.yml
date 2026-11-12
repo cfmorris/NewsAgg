@@ -124,7 +124,7 @@ jobs:
           abort "Expected a redirect to sign-in, got #{dashboard.status}" unless dashboard.status == 302 &&
             dashboard["Location"].to_s.include?("/users/sign_in")
           '@ | bundle exec ruby
-      - name: Neo4j integration tests (repeat import, source materialisation)
+      - name: Neo4j integration tests (repeat import, source materialisation, source cost)
         shell: pwsh
         run: pwsh -NoProfile -File ./test/support/neo4j-test.ps1
 

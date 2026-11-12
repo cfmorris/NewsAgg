@@ -3,7 +3,8 @@ param(
   [switch]$Keep,
   [string[]]$Tests = @(
     "test/integration/repeat_import_test.rb",
-    "test/integration/source_materialisation_test.rb"
+    "test/integration/source_materialisation_test.rb",
+    "test/integration/source_cost_test.rb"
   )
 )
 

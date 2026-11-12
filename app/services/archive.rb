@@ -124,6 +124,33 @@ class Archive
     CYPHER
   end
 
+  # Recomputes every NewsSource.cost_usd from the articles attributed to it.
+  #
+  # The total is recomputed from the articles on every call rather than
+  # incremented, so calling it twice - or replaying an import - can never
+  # double-count: a source's cost is exactly the sum of summary_cost_usd over
+  # the articles joined to it through NewsDiscovery.source == NewsSource.name.
+  #
+  # A null, missing or zero article cost contributes nothing; an article that
+  # carries the same source under more than one discovery is counted once; and
+  # a source with no articles is set to 0.0. Sources are matched without an
+  # enabled filter, so a source disabled in config keeps the historical cost of
+  # the articles it already contributed instead of being reset.
+  #
+  # Returns the number of source nodes updated.
+  def recompute_source_costs
+    rows = query(<<~CYPHER)
+      MATCH (source:NewsSource)
+      OPTIONAL MATCH (article:NewsArticle)-[:DISCOVERED_VIA]->(discovery:NewsDiscovery)
+      WHERE discovery.source = source.name
+      WITH source, article, min(coalesce(article.summary_cost_usd, 0.0)) AS article_cost
+      WITH source, sum(article_cost) AS total
+      SET source.cost_usd = total, source.cost_updated_at = datetime()
+      RETURN count(*) AS sources
+    CYPHER
+    rows.empty? ? 0 : rows.first.fetch("sources")
+  end
+
   # Every materialised source, for round-trip checks and reporting.
   def source_nodes
     query(<<~CYPHER)

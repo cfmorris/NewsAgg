@@ -200,7 +200,7 @@ Dir.mktmpdir("newsagg-sources-") do |directory|
       "the rename produced a second node")
   end
 
-  check "a re-import preserves existing article_count, cost_usd and quality_score" do
+  check "a bare re-sync by the materialiser leaves accumulated values alone" do
     archive.query(<<~CYPHER, { id: alpha_id, count: 7, cost: 0.42, score: 0.75 })
       MATCH (source:NewsSource {id: $id})
       SET source.article_count = $count, source.cost_usd = $cost, source.quality_score = $score
@@ -226,7 +226,7 @@ Dir.mktmpdir("newsagg-sources-") do |directory|
     assert(node["enabled"] == false, "enabled did not follow config, was #{node["enabled"].inspect}")
   end
 
-  check "an import materialises the registry and keeps accumulated values" do
+  check "an import materialises the registry and recomputes derived cost" do
     record = {
       "url" => "https://gamma.example.test/story-#{run}",
       "title" => "A story from the gamma wire",
@@ -249,7 +249,13 @@ Dir.mktmpdir("newsagg-sources-") do |directory|
     assert(nodes.count { |node| node["id"] == gamma_id } == 1, "gamma was duplicated by the import")
     alpha_node = nodes.find { |node| node["id"] == alpha_id }
     assert(alpha_node["article_count"] == 7, "alpha article_count was reset by the import")
-    assert(alpha_node["cost_usd"] == 0.42, "alpha cost_usd was reset by the import")
+    # cost_usd is derived from the articles now: alpha contributed none, so the
+    # import recomputes it to 0.0 instead of keeping the seeded 0.42.
+    assert(alpha_node["cost_usd"] == 0.0,
+      "alpha derived cost_usd was #{alpha_node["cost_usd"].inspect}, expected 0.0")
+    gamma_node = nodes.find { |node| node["id"] == gamma_id }
+    assert(gamma_node["cost_usd"] == 0.0,
+      "gamma cost_usd was #{gamma_node["cost_usd"].inspect}, expected 0.0 for a costless record")
   end
 end
 

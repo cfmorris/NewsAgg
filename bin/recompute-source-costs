@@ -1,0 +1,15 @@
+#!/usr/bin/env ruby
+require_relative "../app/services/archive"
+
+# Recomputes every NewsSource.cost_usd from the articles attributed to it.
+#
+# Safe to run at any time and any number of times: the total is a sum over the
+# articles, so a rerun produces the same value instead of adding to it. Useful
+# as a backfill for costs recorded before per-source aggregation existed.
+begin
+  updated = Archive.new.recompute_source_costs
+rescue Archive::Unavailable => error
+  abort "The archive is unavailable: #{error.message}"
+end
+
+puts "Recomputed cost for #{updated} source#{"s" unless updated == 1}"

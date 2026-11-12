@@ -113,7 +113,18 @@ idempotent `MERGE`, so importing twice leaves exactly one node per source. The
 `exclude_domains`) plus the `override` flag and `override_keys` list that name
 the settings departing from their defaults; the node owns the accumulated facts
 `article_count`, `cost_usd` and `quality_score`, which are seeded at 0 on create
-and preserved on every later sync — a re-import never wipes them.
+and preserved by the materialiser on every later sync — a re-sync never wipes
+them.
+
+`cost_usd` is derived, not incremented: after every import the archive
+recomputes it as the sum of `summary_cost_usd` over the articles attributed to
+that source (joined through `NewsDiscovery.source` = the `NewsSource` `name`).
+Because the total is recomputed from the articles, replaying an import or
+running the aggregation again cannot double-count, a null or zero article cost
+contributes nothing, and an article discovered twice by the same source counts
+once. Sources are matched without an `enabled` filter, so a source disabled in
+config keeps the historical cost of the articles it already contributed.
+`bin/recompute-source-costs` runs the same aggregation standalone as a backfill.
 
 #### Daily budget and the Neo4j breaker
 
