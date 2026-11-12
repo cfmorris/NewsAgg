@@ -55,10 +55,10 @@ TestReport.run do
         "the boot registry is not exposed on Rails.application.config.x")
     end
 
-    check "the registry holds Hacker News as the only enabled source" do
-      assert(boot_registry.names == ["Hacker News"],
-        "expected only the explicitly listed source, got #{boot_registry.names.inspect}")
-      assert(boot_registry.enabled_names == ["Hacker News"],
+    check "the registry holds exactly the explicitly listed shared sources" do
+      assert(boot_registry.names == ["Hacker News", "Lobsters"],
+        "expected only the explicitly listed sources, got #{boot_registry.names.inspect}")
+      assert(boot_registry.enabled_names == boot_registry.names,
         "enabled sources were #{boot_registry.enabled_names.inspect}")
     end
 

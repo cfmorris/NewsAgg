@@ -35,3 +35,13 @@ sources:
     domains: []
     exclude_domains: []
     owner: null
+  - id: lobsters
+    name: Lobsters
+    kind: api
+    url: https://lobste.rs/hottest.json
+    enabled: true
+    max_items: 10
+    min_words: 40
+    domains: []
+    exclude_domains: []
+    owner: null

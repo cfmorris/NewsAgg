@@ -92,6 +92,9 @@ jobs:
       - name: Ingestion integration test
         shell: pwsh
         run: bundle exec ruby test/integration/ingestion_test.rb
+      - name: Lobsters ingestion integration test
+        shell: pwsh
+        run: bundle exec ruby test/integration/lobsters_test.rb
       - name: Article quality score integration test
         shell: pwsh
         run: bundle exec ruby test/integration/quality_score_test.rb

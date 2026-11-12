@@ -86,8 +86,8 @@ start a puller. Set `NEWSAGG_AUTO_PULL=0` to keep the web process from pulling.
 `config/sources.yml` is the single explicit list of ingest sources. Every entry
 declares `name`, `kind` (`rss` or `api`), `url`, `enabled`, `max_items`,
 `min_words`, `domains`/`exclude_domains`, and `owner` (null for the shared
-sources, an owner id for future per-owner paid ones). Hacker News is the only
-source listed and enabled today.
+sources, an owner id for future per-owner paid ones). Hacker News and Lobsters
+are listed and enabled today.
 
 The file is parsed and validated at boot: a missing file, unknown or missing
 `kind`, missing or non-http `url`, duplicate `name`, unknown key, or malformed
@@ -106,6 +106,14 @@ the feed that surfaced it, and the retry file is gated the same way, so removing
 or disabling a source stops its backlog too. Each refusal is logged as
 `source gate: dropped candidate source=... reason=... url=...` with a run summary,
 and `last_result` carries the drop count and per-reason totals.
+
+The Lobsters adapter reads its allowlist entry's URL (one JSON poll, no per-item
+requests) and yields the same candidate shape as Hacker News. A Lobsters
+self-post has no external `url`: the candidate carries the `short_id_url`
+discussion link and `fetch: false`, so the batch counts it as discussion-only
+instead of fetching the discussion page as if it were an article. That skip is
+reported in the run summary (`N discussion-only skipped`) and never becomes a
+retry entry.
 
 Every import also materialises the allowlist as one `NewsSource` node per entry
 in Neo4j, identified by the entry's `id` (an optional explicit slug in
