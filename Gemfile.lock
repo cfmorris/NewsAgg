@@ -83,10 +83,10 @@ GEM
     connection_pool (3.0.2)
     crass (1.0.8)
     date (3.6.0)
-    devise (4.9.4)
+    devise (5.0.4)
       bcrypt (~> 3.0)
       orm_adapter (~> 0.1)
-      railties (>= 4.1.0)
+      railties (>= 7.0)
       responders
       warden (~> 1.2.3)
     devise-two-factor (6.4.1)
@@ -221,7 +221,7 @@ PLATFORMS
 
 DEPENDENCIES
   bcrypt (~> 3.1)
-  devise (~> 4.9)
+  devise (~> 5.0)
   devise-two-factor (~> 6.0)
   puma (>= 6)
   rails (~> 8.0)
@@ -249,7 +249,7 @@ CHECKSUMS
   connection_pool (3.0.2) sha256=33fff5ba71a12d2aa26cb72b1db8bba2a1a01823559fb01d29eb74c286e62e0a
   crass (1.0.8) sha256=7a0145c7a2c59f8e7923b3a69ce819c444823a00a5127d805298fea13be24efe
   date (3.6.0) sha256=18ac945c4e24ebd93534f8eab8c2fd8c5604b3e977105b3798d62a1e8d27b580
-  devise (4.9.4) sha256=920042fe5e704c548aa4eb65ebdd65980b83ffae67feb32c697206bfd975a7f8
+  devise (5.0.4) sha256=d605f2b85854e74e56ee789e2d398702bc2d06e6bcd894717a670a3199c74cc1
   devise-two-factor (6.4.1) sha256=82f70ebc1d0b2efa751da214bb9fc9ea1c6d506b35e8934396528b0f42322086
   drb (2.2.3) sha256=0b00d6fdb50995fe4a45dea13663493c841112e4068656854646f418fda13373
   erb (6.0.7) sha256=c5ca6dc25b0ef974a44dc8f59fe847577122483b1968a38dec305c60bf91ee92
