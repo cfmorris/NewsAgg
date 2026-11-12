@@ -337,5 +337,36 @@ TestReport.run do
       assert(record["quality_status"] == "default",
         "the defaulted score's status was #{record["quality_status"].inspect}")
     end
+
+    # HackerNewsClient had no check of its own. This drives its archive-key path
+    # with a stubbed client: the only story in the feed is already archived under
+    # this source, so its discussion id must keep it out of the candidates. The
+    # archived row carries a different article URL, so only the discovery id can
+    # exclude item 42.
+    hn_archive_rows = [{
+      "url" => "https://news.example/archived-under-another-url",
+      "discoveries" => [{
+        "source" => "Hacker News",
+        "url" => "https://news.ycombinator.com/item?id=42",
+        "external_id" => "42"
+      }]
+    }]
+    hn_stub = Object.new
+    hn_stub.define_singleton_method(:get_json) do |url|
+      return [42] if url == "https://hacker-news.firebaseio.com/v0/newstories.json"
+
+      {
+        "id" => 42, "type" => "story", "title" => "A story that is already archived",
+        "url" => "https://news.example/archived-story", "time" => 1_760_000_000, "score" => 12
+      }
+    end
+    hn_client = HackerNewsClient.new(name: "Hacker News", http: hn_stub)
+
+    check "a Hacker News story archived under this source is not a candidate again" do
+      candidates = hn_client.collect_candidates(feed: "new", limit: 5, archive_rows: hn_archive_rows)
+
+      assert(candidates.none? { |entry| entry["external_id"] == "42" },
+        "the archived discussion was returned as a candidate: #{candidates.inspect}")
+    end
   end
 end

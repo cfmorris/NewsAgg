@@ -2,6 +2,7 @@ require "json"
 require "time"
 require "uri"
 
+require_relative "discovery_keys"
 require_relative "http_client"
 require_relative "url_key"
 
@@ -78,20 +79,11 @@ class LobstersClient
   # URL. A short id in a discovery link marks the story seen even when its
   # article was later archived under a different canonical URL.
   def archive_keys(rows)
-    known_urls = []
-    known_discussions = []
-    Array(rows).each do |article|
-      key = UrlKey.call(article["url"])
-      known_urls << key if key
-      Array(article["discoveries"]).each do |discovery|
-        next unless discovery.is_a?(Hash) && discovery["source"] == name
-        next unless discovery["url"].is_a?(String)
+    DiscoveryKeys.call(rows, name) do |discovery|
+      next nil unless discovery["url"].is_a?(String)
 
-        id = short_id_from(discovery["url"])
-        known_discussions << id if id
-      end
+      short_id_from(discovery["url"])
     end
-    [known_urls, known_discussions]
   end
 
   def short_id_from(url)
