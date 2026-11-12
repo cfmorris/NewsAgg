@@ -141,6 +141,7 @@ database:
 
 ```powershell
 bundle exec ruby test/integration/sign_in_gate_test.rb
+bundle exec ruby test/integration/top_bar_test.rb
 bundle exec ruby test/integration/dashboard_test.rb
 bundle exec ruby test/integration/infographic_test.rb
 bundle exec ruby test/integration/ingestion_test.rb
@@ -151,7 +152,10 @@ bundle exec ruby test/integration/auto_pull_budget_test.rb
 The first drives the public landing page and the sign-in gate over HTTP: a guest
 reaches only `/` and the Devise screens, the data endpoints answer 401 JSON
 instead of a redirect, signing in and signing up land on `/dashboard`, and a
-guest sent back from a gated screen returns to it after signing in.
+guest sent back from a gated screen returns to it after signing in. The top-bar
+test covers the account menu in both states, the Profile and Admin console links
+appearing as soon as their routes exist, the single copy of the product title,
+and the Devise sign-in form still submitting through the layout.
 
 The next exercises Rails rendering, server-side filtering and counts, the Turbo
 stream ETag, and the Auto-pull endpoint. The second runs the Ruby ingestion
