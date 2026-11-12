@@ -173,6 +173,38 @@ substituted, and the topic sidebar's **Sort** block offers `Newest first` and
 `Highest quality`. The quality order puts the highest score first, keeps ties in
 the archive's own order, and places unscored articles last.
 
+#### Long-form chunking and the Long form tag
+
+One summarizer request carries at most 12,000 characters
+(`ArticleExtractor::MAX_TEXT`), so a research report would lose most of its text
+before the model saw it. Extraction now keeps up to 120,000 characters (ten
+windows), and a document longer than one window is summarized in parts:
+
+1. `ArticleChunker` splits the extracted text deterministically. The extractor
+   writes every `<h1>`-`<h6>` as a `## Heading` line, so a document with
+   headings is cut at a heading whenever one falls in the last 40% of the
+   window; a document with none falls back to fixed windows that end on a
+   paragraph, sentence or word boundary. At most 10 chunks are ever produced.
+2. Each chunk gets its own condensing call, which returns a short summary of
+   that part only.
+3. A final synthesis call receives those part summaries and produces the
+   archive contract — the three-sentence summary, technical depth, topics and
+   the 1-100 quality score. A condensing call never sets the score.
+
+Every call's usage block is priced and summed, so `summary_cost_usd` and the
+token columns are the article's true cost (a three-part article is four calls,
+not one). The marker for how it was summarized is stored on the article as
+`summary_strategy` (`single`, `headings` or `windows`) and
+`summary_chunk_count`, written on create next to the other summary facts and
+exposed by `GET /articles`.
+
+Being chunked is not the same as being long form. `LongForm` adds the
+**Long form** topic from the length that was extracted — 20,000 characters —
+and nothing else: the tag is not in the topic list offered to the model, a copy
+returned by the model is dropped, and it is appended after the subject topics.
+It is seeded in `db/seed-taxonomy.cypher` under its own `Format` heading, so it
+groups and filters like any other topic without ever being a model judgement.
+
 #### Daily budget and the Neo4j breaker
 
 Auto-pull keeps its policy state in `tmp/auto-pull.state.json`: the current day,
@@ -246,6 +278,7 @@ bundle exec ruby test/integration/dashboard_pagination_test.rb
 bundle exec ruby test/integration/infographic_test.rb
 bundle exec ruby test/integration/ingestion_test.rb
 bundle exec ruby test/integration/quality_score_test.rb
+bundle exec ruby test/integration/long_form_test.rb
 bundle exec ruby test/integration/source_registry_test.rb
 bundle exec ruby test/acceptance/source_allowlist_acceptance_test.rb
 bundle exec ruby test/integration/auto_pull_test.rb

@@ -2,6 +2,7 @@ require "date"
 require "uri"
 
 require_relative "archive"
+require_relative "article_chunker"
 require_relative "quality_score"
 require_relative "source_materializer"
 
@@ -22,7 +23,7 @@ class ImportRecords
       validate!(record, index)
     end
 
-    normalized = records.map { |record| with_quality(record) }
+    normalized = records.map { |record| with_summary_metadata(with_quality(record)) }
 
     @archive.prepare
     materialize_sources
@@ -52,6 +53,14 @@ class ImportRecords
     status = quality.status unless QualityScore::STATUSES.include?(status)
 
     record.merge("quality_score" => quality.value, "quality_status" => status)
+  end
+
+  # The summarization marker travels with the record: which strategy produced
+  # the summary and how many parts it was read in. A record from an older retry
+  # file (or a summarizer that reports neither) is recorded as a single call
+  # rather than left blank, so the article always says how it was summarized.
+  def with_summary_metadata(record)
+    record.merge(ArticleChunker.metadata(record["summary_strategy"], record["summary_chunk_count"]))
   end
 
   # The allowlist is materialised on every import, before any article is
