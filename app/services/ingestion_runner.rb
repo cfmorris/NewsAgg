@@ -8,6 +8,7 @@ require_relative "deepseek_summarizer"
 require_relative "hacker_news_client"
 require_relative "import_records"
 require_relative "ingest_batch"
+require_relative "ingest_failures"
 require_relative "lobsters_client"
 require_relative "retry_store"
 require_relative "rss_client"
@@ -76,7 +77,7 @@ class IngestionRunner
         imported = @importer.call(result[:records])
         @err.puts "Imported #{imported} discovery records"
       rescue StandardError => error
-        detail = redact("#{failure_reason(error, secrets)}", secrets)[0, 500]
+        detail = IngestFailures.redact("#{failure_reason(error, secrets)}", secrets)[0, 500]
         import_failure = {
           kind: AutoPull::Failure.classify(error).to_s,
           message: detail,
@@ -84,7 +85,7 @@ class IngestionRunner
         }
         failures.concat(result[:records].map do |record|
           {
-            "story" => story_for(record),
+            "story" => IngestFailures.story(record),
             "record" => record,
             "reason" => "import failed: #{detail}",
             "attempts" => 1,
@@ -175,25 +176,8 @@ class IngestionRunner
     false
   end
 
-  def story_for(record)
-    story = {
-      "url" => record["url"], "title" => record["title"],
-      "source" => record["source"], "external_id" => record["external_id"]
-    }
-    story["discovery_url"] = record["discovery_url"] if record["discovery_url"]
-    story
-  end
-
   def failure_reason(error, secrets)
     text = error.respond_to?(:message) ? error.message.to_s : error.to_s
-    ArticleExtractor.new.clean_text(redact(text, secrets), 300)
-  end
-
-  def redact(value, secrets)
-    text = String(value)
-    secrets.each do |secret|
-      text = text.split(secret).join("[redacted]") if secret.is_a?(String) && secret.length >= 4
-    end
-    text
+    ArticleExtractor.new.clean_text(IngestFailures.redact(text, secrets), 300)
   end
 end
