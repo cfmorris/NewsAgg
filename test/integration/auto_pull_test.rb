@@ -1,3 +1,5 @@
+ENV["RAILS_ENV"] = "test"
+
 require "fileutils"
 require "json"
 require "rack/mock"
@@ -9,6 +11,7 @@ require_relative "../../config/environment"
 require_relative "../../app/services/auto_pull"
 require_relative "../../app/services/auto_pull_supervisor"
 require_relative "../support/assertions"
+require_relative "../support/signed_in"
 
 include TestReport
 
@@ -84,7 +87,9 @@ ensure
 end
 
 request = Rack::MockRequest.new(Rails.application)
-host = { "HTTP_HOST" => "127.0.0.1:3000" }
+# The auto-pull endpoint is behind the sign-in gate; the cookie makes these
+# requests the ones a signed-in dashboard would send.
+host = { "HTTP_HOST" => "127.0.0.1:3000", "HTTP_COOKIE" => sign_in_cookie }
 
 # Boots the config.ru entry point against throwaway flag, lock and state paths
 # so a test exercises the real boot path without touching the checkout's tmp/.
@@ -214,7 +219,7 @@ TestReport.run do
       runner.wait_for_start
       wait_until { supervisor.state[:last_run_at] }
 
-      page = request.get("/", host)
+      page = request.get("/dashboard", host)
       assert(page.body.include?("id=\"auto-pull-status\""), "the toggle has no status line")
       assert(page.body.include?("Last pull"), "the last pull time is not shown")
     end

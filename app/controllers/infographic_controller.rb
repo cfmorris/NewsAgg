@@ -1,7 +1,7 @@
 require_relative "../services/archive"
 require_relative "../services/infographic_digest"
 
-class InfographicController < ActionController::Base
+class InfographicController < ApplicationController
   layout "application"
 
   def show

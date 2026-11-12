@@ -25,8 +25,9 @@ Get-Content -Raw db/first-digest.json | ruby bin/import-news
 bundle exec puma -b tcp://127.0.0.1:3000
 ```
 
-Open [the local dashboard](http://127.0.0.1:3000/). Keep the server bound to
-loopback because the dashboard has no separate user login.
+Open [the local site](http://127.0.0.1:3000/). The root path is a public landing
+page; signing in takes you to the dashboard at `/dashboard`. Every other screen
+needs a session, so keep the server bound to loopback as well.
 
 The importer accepts a JSON array from standard input. Each row has a canonical
 `url`, `title`, `summary`, `depth`, `publisher`, `topics` array, `source`,
@@ -139,6 +140,7 @@ disposable archive, so they never call Hacker News, DeepSeek, or a live Neo4j
 database:
 
 ```powershell
+bundle exec ruby test/integration/sign_in_gate_test.rb
 bundle exec ruby test/integration/dashboard_test.rb
 bundle exec ruby test/integration/infographic_test.rb
 bundle exec ruby test/integration/ingestion_test.rb
@@ -146,7 +148,12 @@ bundle exec ruby test/integration/auto_pull_test.rb
 bundle exec ruby test/integration/auto_pull_budget_test.rb
 ```
 
-The first exercises Rails rendering, server-side filtering and counts, the Turbo
+The first drives the public landing page and the sign-in gate over HTTP: a guest
+reaches only `/` and the Devise screens, the data endpoints answer 401 JSON
+instead of a redirect, signing in and signing up land on `/dashboard`, and a
+guest sent back from a gated screen returns to it after signing in.
+
+The next exercises Rails rendering, server-side filtering and counts, the Turbo
 stream ETag, and the Auto-pull endpoint. The second runs the Ruby ingestion
 pipeline against recorded Hacker News and article fixtures, a fake DeepSeek
 endpoint, and a disposable in-memory archive, including retry handling and secret

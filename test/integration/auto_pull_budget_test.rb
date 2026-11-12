@@ -1,3 +1,5 @@
+ENV["RAILS_ENV"] = "test"
+
 require "fileutils"
 require "json"
 require "rack/mock"
@@ -9,6 +11,7 @@ require_relative "../../config/environment"
 require_relative "../../app/services/auto_pull_supervisor"
 require_relative "../../app/services/ingest_batch"
 require_relative "../support/assertions"
+require_relative "../support/signed_in"
 
 include TestReport
 
@@ -127,7 +130,9 @@ def fresh_state(clock, overrides = {})
 end
 
 request = Rack::MockRequest.new(Rails.application)
-host = { "HTTP_HOST" => "127.0.0.1:3000" }
+# The auto-pull endpoint is behind the sign-in gate; the cookie makes this
+# request the one a signed-in dashboard would send.
+host = { "HTTP_HOST" => "127.0.0.1:3000", "HTTP_COOKIE" => sign_in_cookie }
 
 TestReport.run do
   check "an exhausted daily budget makes decide skip with :budget and blocks the runner" do

@@ -56,6 +56,9 @@ jobs:
       - name: Roles and admin area integration test
         shell: pwsh
         run: bundle exec ruby test/integration/admin_roles_test.rb
+      - name: Landing page and sign-in gate integration test
+        shell: pwsh
+        run: bundle exec ruby test/integration/sign_in_gate_test.rb
       - name: Dashboard integration test
         shell: pwsh
         run: bundle exec ruby test/integration/dashboard_test.rb
@@ -80,13 +83,19 @@ jobs:
 
           request = Rack::MockRequest.new(Rails.application)
           host = { "HTTP_HOST" => "127.0.0.1:3000" }
-          dashboard = request.get("/", host)
-          abort "Dashboard failed (#{dashboard.status})" unless dashboard.ok? &&
-            dashboard.body.include?("NewsAgg: Your media aggregator")
+          landing = request.get("/", host)
+          abort "Landing page failed (#{landing.status})" unless landing.ok? &&
+            landing.body.include?("NewsAgg: Your media aggregator") &&
+            landing.body.include?("/users/sign_in") &&
+            landing.body.include?("/users/sign_up")
 
           ENV.delete("NEO4J_PASSWORD")
           archive = request.get("/articles", host)
-          abort "Expected HTTP 503 without Neo4j credentials, got #{archive.status}" unless archive.status == 503
+          abort "Expected HTTP 401 for a guest, got #{archive.status}" unless archive.status == 401
+
+          dashboard = request.get("/dashboard", host)
+          abort "Expected a redirect to sign-in, got #{dashboard.status}" unless dashboard.status == 302 &&
+            dashboard["Location"].to_s.include?("/users/sign_in")
           '@ | bundle exec ruby
       - name: Repeat-import integration test
         shell: pwsh
