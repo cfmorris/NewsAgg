@@ -5,6 +5,9 @@
 # never fetched. A missing, empty, or malformed file aborts boot.
 #
 # Per-entry keys (any other key is a boot-time error, so typos cannot hide):
+#   id               optional stable identifier: lowercase letters, digits and
+#                    hyphens, default the slugified name. It is the NewsSource
+#                    node key, so it must stay put when the display name changes
 #   name             required, unique (compared case-insensitively), the source
 #                    identifier carried on every article it contributes
 #   kind             required, "rss" or "api"
@@ -22,7 +25,8 @@
 #   owner            optional, null or an owner id; null reserved for the shared
 #                    sources, set for future per-owner paid sources
 sources:
-  - name: Hacker News
+  - id: hacker-news
+    name: Hacker News
     kind: api
     url: https://hacker-news.firebaseio.com/v0
     enabled: true

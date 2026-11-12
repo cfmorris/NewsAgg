@@ -2,13 +2,16 @@ require "date"
 require "uri"
 
 require_relative "archive"
+require_relative "source_materializer"
 
 # Validates importer-contract records and writes them to the Neo4j archive.
 class ImportRecords
   REQUIRED = %w[url title summary depth publisher source external_id].freeze
 
-  def initialize(archive: Archive.new)
+  def initialize(archive: Archive.new, registry: nil, materializer: nil)
     @archive = archive
+    @registry = registry
+    @materializer = materializer
   end
 
   def call(records)
@@ -19,6 +22,7 @@ class ImportRecords
     end
 
     @archive.prepare
+    materialize_sources
     @archive.seed_taxonomy
     mappings = records.flat_map { |record| Array(record["fast_mappings"]) }
     unless mappings.all? { |entry| valid_mapping?(entry) }
@@ -30,6 +34,14 @@ class ImportRecords
   end
 
   private
+
+  # The allowlist is materialised on every import, before any article is
+  # written, so each contributing source always has exactly one node.
+  def materialize_sources
+    materializer = @materializer ||
+      SourceMaterializer.new(archive: @archive, registry: @registry)
+    materializer.call
+  end
 
   def validate!(record, index)
     valid = record.is_a?(Hash) &&

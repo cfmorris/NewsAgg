@@ -104,6 +104,17 @@ or disabling a source stops its backlog too. Each refusal is logged as
 `source gate: dropped candidate source=... reason=... url=...` with a run summary,
 and `last_result` carries the drop count and per-reason totals.
 
+Every import also materialises the allowlist as one `NewsSource` node per entry
+in Neo4j, identified by the entry's `id` (an optional explicit slug in
+`config/sources.yml`, defaulting to the slugified `name`) and written with an
+idempotent `MERGE`, so importing twice leaves exactly one node per source. The
+`name` is the display label and follows config. Config owns the policy fields
+(`kind`, `url`, `enabled`, `owner`, `max_items`, `min_words`, `domains`,
+`exclude_domains`) plus the `override` flag and `override_keys` list that name
+the settings departing from their defaults; the node owns the accumulated facts
+`article_count`, `cost_usd` and `quality_score`, which are seeded at 0 on create
+and preserved on every later sync — a re-import never wipes them.
+
 #### Daily budget and the Neo4j breaker
 
 Auto-pull keeps its policy state in `tmp/auto-pull.state.json`: the current day,
