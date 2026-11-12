@@ -30,11 +30,11 @@ ActiveRecord::Base.establish_connection(
 )
 ActiveRecord::MigrationContext.new(Rails.root.join("db/migrate")).migrate
 
-# The Profile screen and the admin console root are separate cards: their routes
-# do not exist yet. The bar must pick them up the moment they do, so this test
-# introduces them and then checks the links render - no hardcoded 404s.
+# The admin console root is a separate card: its route does not exist yet. The
+# bar must pick it up the moment it does, so this test introduces it and then
+# checks the link renders - no hardcoded 404s. The Profile link's route
+# (/account) ships with the app, so that one is not stubbed here.
 Rails.application.routes.append do
-  get "/account", to: "dashboard#show", as: :account
   namespace :admin do
     root to: "users#index"
   end

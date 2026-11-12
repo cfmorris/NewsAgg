@@ -16,6 +16,12 @@ Rails.application.routes.draw do
   # The dashboard is a signed-in screen now.
   get "/dashboard", to: "dashboard#show"
 
+  # Your own account: one screen, two narrow writes, both gated by the session
+  # the rest of the app already requires.
+  get "/account", to: "accounts#show", as: :account
+  patch "/account/email", to: "accounts#update_email", as: :account_email
+  patch "/account/password", to: "accounts#update_password", as: :account_password
+
   # The data endpoints default to JSON so an expired session answers 401 to a
   # fetch() caller instead of redirecting it into the sign-in page.
   get "/articles", to: "dashboard#articles", defaults: { format: :json }

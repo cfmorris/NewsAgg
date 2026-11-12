@@ -62,6 +62,9 @@ jobs:
       - name: Top bar integration test
         shell: pwsh
         run: bundle exec ruby test/integration/top_bar_test.rb
+      - name: Account page integration test
+        shell: pwsh
+        run: bundle exec ruby test/integration/account_page_test.rb
       - name: Dashboard integration test
         shell: pwsh
         run: bundle exec ruby test/integration/dashboard_test.rb
