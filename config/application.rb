@@ -14,10 +14,11 @@ module NewsArchive
     config.load_defaults 8.0
     config.eager_load = Rails.env.production?
 
-    # The three public assets (dashboard.css, dashboard.js, turbo.js) are served
-    # by DashboardController so they are reachable before a session exists. The
-    # static file middleware would otherwise answer those paths first from
-    # public/ and drop the charset, so it must stay out of the way.
+    # The three app assets (dashboard.css, dashboard.js, turbo.js) live under
+    # app/assets/static/ and are served by DashboardController so they are
+    # reachable before a session exists. Keeping them out of public/ stops the
+    # static file middleware answering those paths first and dropping the
+    # charset; leaving it disabled keeps that second chance out of the way.
     config.public_file_server.enabled = false
     config.secret_key_base = ENV.fetch("SECRET_KEY_BASE") { SecureRandom.hex(64) }
 

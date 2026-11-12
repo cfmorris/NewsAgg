@@ -1,18 +1,26 @@
 require "time"
+require "uri"
 
 require_relative "article_extractor"
 require_relative "deepseek_summarizer"
-require_relative "hacker_news_client"
 require_relative "safe_fetcher"
+require_relative "source_gate"
 require_relative "url_key"
 
-# Runs one Hacker News ingestion pass with retries kept for the next batch.
+# Runs one ingestion pass across the injected source adapters.
+#
+# Adapters and the gate are required, never defaulted: there is no built-in
+# source, no implicit Hacker News fallback, and no discovery of a source from a
+# URL. Every candidate — from an adapter, from an embedded link inside a feed,
+# or replayed from the retry file — must be admitted by the SourceGate before
+# any fetch happens for it.
 class IngestBatch
   MAX_REASON = 300
 
-  def initialize(hn: HackerNewsClient.new, fetcher: SafeFetcher.new, summarizer:,
+  def initialize(adapters:, gate:, fetcher: SafeFetcher.new, summarizer:,
     extractor: ArticleExtractor.new, now: -> { Time.now.utc }, secrets: [], meter: nil)
-    @hn = hn
+    @adapters = adapters
+    @gate = gate
     @fetcher = fetcher
     @summarizer = summarizer
     @extractor = extractor
@@ -22,7 +30,12 @@ class IngestBatch
   end
 
   def run(feed: "new", limit: 10, archive_rows: [], retry_entries: [])
-    archive_urls, archived_discussions = @hn.archive_keys(archive_rows)
+    if @summarizer.nil? && !@adapters.empty?
+      raise ArgumentError, "A summarizer is required when a source adapter is present"
+    end
+
+    report = SourceGate::Report.new
+    archive_urls, archived_discussions = archive_keys(archive_rows)
     candidates = {}
     skipped = 0
 
@@ -30,25 +43,45 @@ class IngestBatch
       retry_entry = normalize_retry(entry)
       next unless retry_entry
 
-      key = UrlKey.call(retry_entry[:story]["url"])
-      external_id = retry_entry[:story]["external_id"]&.to_s
+      story = retry_entry[:story]
+      resolved = @gate.admit(story)
+      if resolved.dropped?
+        report.add(source: story["source"], url: story["url"], reason: resolved.reason)
+        next
+      end
+
+      key = UrlKey.call(story["url"])
+      external_id = story["external_id"]&.to_s
       if archive_urls.include?(key) || (external_id && archived_discussions.include?(external_id))
         skipped += 1
         next
       end
-      candidates[key] ||= retry_entry
+      candidates[key] ||= retry_entry.merge(story: gated_story(story, resolved))
     end
 
-    @hn.collect_candidates(feed: feed, limit: limit, archive_rows: archive_rows).each do |story|
-      key = UrlKey.call(story["url"])
-      next unless key
+    each_admitted_source(report) do |source, adapter|
+      per_source_limit = [limit, source.max_items].min
+      adapter.collect_candidates(feed: feed, limit: per_source_limit, archive_rows: archive_rows)
+        .each do |story|
+          next unless story.is_a?(Hash)
 
-      existing = candidates[key]
-      candidates[key] = if existing
-        { story: existing[:story].merge(story), record: existing[:record], attempts: existing[:attempts] }
-      else
-        { story: story, record: nil, attempts: 0 }
-      end
+          resolved = @gate.admit(story)
+          if resolved.dropped?
+            report.add(source: story["source"], url: story["url"], reason: resolved.reason)
+            next
+          end
+
+          story = gated_story(story, resolved)
+          key = UrlKey.call(story["url"])
+          next unless key
+
+          existing = candidates[key]
+          candidates[key] = if existing
+            { story: existing[:story].merge(story), record: existing[:record], attempts: existing[:attempts] }
+          else
+            { story: story, record: nil, attempts: 0 }
+          end
+        end
     end
 
     records = []
@@ -113,7 +146,8 @@ class IngestBatch
           "depth" => summary["depth"],
           "publisher" => publisher,
           "topics" => summary["topics"],
-          "source" => story["source"] || "Hacker News",
+          # The gate decided the source; nothing is defaulted here.
+          "source" => story["source"],
           "external_id" => story["external_id"].to_s,
           "discovery_url" => story["discovery_url"],
           "published_date" => extracted[:published_date],
@@ -138,7 +172,7 @@ class IngestBatch
     end
 
     { records: records, failures: failures, skipped_archived: skipped,
-      model_calls: model_calls, budget_stopped: budget_stopped }
+      model_calls: model_calls, budget_stopped: budget_stopped, source_gate: report }
   end
 
   def valid_record(record)
@@ -178,6 +212,37 @@ class IngestBatch
   end
 
   private
+
+  # Polls only sources the gate admits. A disabled or unregistered adapter in
+  # the map is never called; the refusal is reported instead.
+  def each_admitted_source(report)
+    @adapters.each do |name, adapter|
+      resolved = @gate.admit_source(name)
+      if resolved.dropped?
+        report.add(source: name, url: nil, reason: resolved.reason)
+        next
+      end
+
+      yield resolved.source, adapter
+    end
+  end
+
+  def archive_keys(archive_rows)
+    urls = []
+    discussions = []
+    @adapters.each_value do |adapter|
+      known_urls, known_discussions = adapter.archive_keys(archive_rows)
+      urls |= Array(known_urls)
+      discussions |= Array(known_discussions)
+    end
+    [urls, discussions]
+  end
+
+  # Carry the allowlist's spelling of the source onto the story, so a record
+  # names the registered source even when the adapter used different casing.
+  def gated_story(story, resolved)
+    story.merge("source" => resolved.source.name)
+  end
 
   def normalize_retry(entry)
     return nil unless entry.is_a?(Hash)

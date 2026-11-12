@@ -78,6 +78,32 @@ web process on the same checkout from pulling alongside the first.
 The supervisor boots from `config.ru`, so `rails runner` and the console never
 start a puller. Set `NEWSAGG_AUTO_PULL=0` to keep the web process from pulling.
 
+#### Source allowlist
+
+`config/sources.yml` is the single explicit list of ingest sources. Every entry
+declares `name`, `kind` (`rss` or `api`), `url`, `enabled`, `max_items`,
+`min_words`, `domains`/`exclude_domains`, and `owner` (null for the shared
+sources, an owner id for future per-owner paid ones). Hacker News is the only
+source listed and enabled today.
+
+The file is parsed and validated at boot: a missing file, unknown or missing
+`kind`, missing or non-http `url`, duplicate `name`, unknown key, or malformed
+value aborts boot with the file path, the entry index, and the reason. There is
+no built-in source and no discovery fallback — an unlisted source is never
+fetched, and an empty `sources:` list yields an empty registry rather than a
+default feed. Set `NEWSAGG_SOURCES_PATH` to load a different file.
+
+Every candidate then passes the pre-fetch gate (`SourceGate`). It must name
+a source that is in the allowlist and enabled, and its URL must satisfy that
+entry's domain rules; otherwise it is dropped before anything is fetched for it.
+The rule holds for links found inside a registered feed: a feed vouches only for
+itself, so an embedded link labelled with an unlisted source is dropped. Disabled
+entries are not polled at all, a candidate with no source is never attributed to
+the feed that surfaced it, and the retry file is gated the same way, so removing
+or disabling a source stops its backlog too. Each refusal is logged as
+`source gate: dropped candidate source=... reason=... url=...` with a run summary,
+and `last_result` carries the drop count and per-reason totals.
+
 #### Daily budget and the Neo4j breaker
 
 Auto-pull keeps its policy state in `tmp/auto-pull.state.json`: the current day,
@@ -149,6 +175,7 @@ bundle exec ruby test/integration/dashboard_test.rb
 bundle exec ruby test/integration/dashboard_pagination_test.rb
 bundle exec ruby test/integration/infographic_test.rb
 bundle exec ruby test/integration/ingestion_test.rb
+bundle exec ruby test/integration/source_registry_test.rb
 bundle exec ruby test/integration/auto_pull_test.rb
 bundle exec ruby test/integration/auto_pull_budget_test.rb
 ```
@@ -176,8 +203,17 @@ The next exercises Rails rendering, server-side filtering and counts, the Turbo
 stream ETag, and the Auto-pull endpoint. The second runs the Ruby ingestion
 pipeline against recorded Hacker News and article fixtures, a fake DeepSeek
 endpoint, and a disposable in-memory archive, including retry handling and secret
-redaction. The third drives the in-process Auto-pull supervisor with a fake
-ingestion runner and a short interval: immediate pull on enable, the next tick,
+redaction. The source registry test loads the committed allowlist and proves
+every malformed case refuses to boot — unknown or missing kind, missing or
+non-http url, duplicate name, unknown key, bad types — and that an unlisted
+source never appears and an empty list stays empty. The source gate test proves
+the pre-fetch allowlist: an unregistered candidate, an embedded link labelled
+with an unlisted source, a candidate with no source, a disabled entry and a
+disallowed domain are all dropped with a recorded reason and a spy fetcher that
+is never called, while a registered enabled source passes and an empty allowlist
+runs a whole pass without a fetch. The third drives the
+in-process Auto-pull supervisor with a fake ingestion runner and a short
+interval: immediate pull on enable, the next tick,
 stopping on disable, skipping an in-flight trigger, the `/auto-pull` payload, the
 single-process pid lock, and the boot reset that clears a leftover flag before
 anything pulls while leaving the policy state alone. The fourth pins the budget
