@@ -1182,6 +1182,32 @@ turbo-frame[busy] #count {
 }
 .account-form input[type="submit"]:hover { background: var(--accent-fill-hover); border-color: var(--accent) }
 
+/* Two-factor enrolment: the key and the otpauth URI are printed as text, not a
+   QR image, so they have to survive a copy-paste and wrap on a narrow screen. */
+.account-mfa-status { margin: .2rem 0 0; color: var(--text-body) }
+.account-section h3 {
+  margin: 1.2rem 0 .35rem;
+  color: var(--text-muted);
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.mfa-key {
+  display: block;
+  max-width: 100%;
+  padding: .6rem .7rem;
+  font-family: ui-monospace, SFMono-Regular, "Cascadia Mono", Menlo, monospace;
+  font-size: .82rem;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 .form-errors {
   margin: .9rem 0 0;
   padding: .55rem .8rem .55rem 1.9rem;
