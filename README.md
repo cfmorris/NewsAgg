@@ -1,4 +1,6 @@
-# Technical Reading Room
+# NewsAgg
+
+![The NewsAgg dashboard: the AI & ML topic showing 59 of 129 articles, with a summarized article and its tags](docs/screenshots/dashboard.png)
 
 Rails owns the dashboard: controllers and views render the archive, filter it, and
 compute every article and topic count on the server. Turbo keeps the page current.
