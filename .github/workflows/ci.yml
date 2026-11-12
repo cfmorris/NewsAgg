@@ -71,3 +71,14 @@ jobs:
       - name: Repeat-import integration test
         shell: pwsh
         run: pwsh -NoProfile -File ./test/support/neo4j-test.ps1
+
+  usage-tool:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Token usage reporter tests
+        run: python -m unittest discover -s test/tools -p "test_*.py" -v
