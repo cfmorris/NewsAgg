@@ -337,5 +337,46 @@ TestReport.run do
       assert(record["quality_status"] == "default",
         "the defaulted score's status was #{record["quality_status"].inspect}")
     end
+
+    # An importer that raises turns every record the batch produced into a
+    # retry entry, with the importer's error as the reason. The broken fixture
+    # story is archived here so the import failure is the only entry written,
+    # and the password in that error must not survive into the file or stderr.
+    import_rows = archive_rows + [{ "title" => "Fixture story that fails once", "url" => "https://broken.example/fail" }]
+    import_retry_path = File.join(directory, "retry-import-failure.json")
+    import_err = StringIO.new
+    import_runner = IngestionRunner.new(
+      archive: DisposableArchive.new(import_rows), retry_path: import_retry_path, http: http,
+      fetcher: FixtureFetcher.new(article_html), summarizer: DeepseekSummarizer.new(env: provider_env, http: http),
+      importer: ->(_records) { raise "Neo4j returned HTTP 401 for neo4j-secret" },
+      now: -> { Time.utc(2026, 11, 11, 12, 0, 0) }, out: StringIO.new, err: import_err,
+      env: provider_env, registry: registry
+    )
+    import_code = import_runner.run(feed: "new", limit: 5)
+
+    check "a failed import is written to the retry file with its story and a redacted reason" do
+      assert(import_code == 1, "expected exit code 1 for the kept retry, got #{import_code}")
+      entries = JSON.parse(File.read(import_retry_path))
+      assert(entries.length == 1,
+        "expected one retry entry, got #{entries.map { |entry| [entry.dig("story", "external_id"), entry["reason"]] }.inspect}")
+      entry = entries.first
+      assert(entry["story"]["url"] == "https://news.example/story",
+        "unexpected retry story url #{entry["story"]["url"].inspect}")
+      assert(entry["story"]["title"] == "Fixture story with a hostile publisher",
+        "unexpected retry story title #{entry["story"]["title"].inspect}")
+      assert(entry["story"]["source"] == "Hacker News",
+        "unexpected retry story source #{entry["story"]["source"].inspect}")
+      assert(entry["story"]["external_id"] == "2002",
+        "unexpected retry story external id #{entry["story"]["external_id"].inspect}")
+      assert(entry["story"]["discovery_url"] == "https://news.ycombinator.com/item?id=2002",
+        "unexpected retry story discovery url #{entry["story"]["discovery_url"].inspect}")
+      assert(entry["story"].keys.sort == %w[discovery_url external_id source title url],
+        "the retry story carried #{entry["story"].keys.sort.inspect}")
+      assert(entry["reason"].start_with?("import failed: "),
+        "retry reason was #{entry["reason"].inspect}")
+      assert(entry["reason"].include?("HTTP 401"), "retry reason missing the failure")
+      assert(!JSON.generate(entry).include?("neo4j-secret"), "the Neo4j password leaked into the retry entry")
+      assert(!import_err.string.include?("neo4j-secret"), "the Neo4j password leaked to stderr")
+    end
   end
 end
