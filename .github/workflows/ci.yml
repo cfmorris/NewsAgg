@@ -42,6 +42,10 @@ jobs:
       - name: Test-double contract (no database, no Neo4j)
         shell: pwsh
         run: bundle exec ruby test/integration/fake_archive_contract_test.rb
+      - name: Rubocop
+        run: |
+          gem install rubocop -v 1.92.2 --no-document
+          rubocop --format simple
       - name: Prepare databases
         shell: pwsh
         run: |
