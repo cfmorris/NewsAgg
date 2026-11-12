@@ -226,7 +226,7 @@ Dir.mktmpdir("newsagg-sources-") do |directory|
     assert(node["enabled"] == false, "enabled did not follow config, was #{node["enabled"].inspect}")
   end
 
-  check "an import materialises the registry and recomputes derived cost" do
+  check "an import materialises the registry and recomputes the derived fields" do
     record = {
       "url" => "https://gamma.example.test/story-#{run}",
       "title" => "A story from the gamma wire",
@@ -248,7 +248,10 @@ Dir.mktmpdir("newsagg-sources-") do |directory|
     assert(nodes.length == 3, "expected 3 nodes after imports, got #{nodes.length}")
     assert(nodes.count { |node| node["id"] == gamma_id } == 1, "gamma was duplicated by the import")
     alpha_node = nodes.find { |node| node["id"] == alpha_id }
-    assert(alpha_node["article_count"] == 7, "alpha article_count was reset by the import")
+    # article_count is derived from the scored articles now: alpha contributed
+    # none, so the import recomputes it to 0 instead of keeping the seeded 7.
+    assert(alpha_node["article_count"] == 0,
+      "alpha article_count was #{alpha_node["article_count"].inspect}, expected 0 from its articles")
     # cost_usd is derived from the articles now: alpha contributed none, so the
     # import recomputes it to 0.0 instead of keeping the seeded 0.42.
     assert(alpha_node["cost_usd"] == 0.0,
@@ -256,6 +259,12 @@ Dir.mktmpdir("newsagg-sources-") do |directory|
     gamma_node = nodes.find { |node| node["id"] == gamma_id }
     assert(gamma_node["cost_usd"] == 0.0,
       "gamma cost_usd was #{gamma_node["cost_usd"].inspect}, expected 0.0 for a costless record")
+    # The record carries no quality score, so the importer normalizes it to the
+    # documented default 50 and the source score is that single article.
+    assert(gamma_node["article_count"] == 1,
+      "gamma article_count was #{gamma_node["article_count"].inspect}, expected 1")
+    assert(gamma_node["quality_score"] == 50.0,
+      "gamma quality_score was #{gamma_node["quality_score"].inspect}, expected 50.0")
   end
 end
 

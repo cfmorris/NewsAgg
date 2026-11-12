@@ -9,7 +9,7 @@ require_relative "source_registry"
 # fallback: a candidate that does not name a source is dropped rather than
 # attributed to the feed that mentioned it, so a registered feed never grants
 # blanket trust to the links inside it. A source that is listed but disabled
-# stops contributing entirely.
+# stops contributing entirely, and so does one the score has paused.
 class SourceGate
   # The outcome for one candidate or one source name.
   Decision = Struct.new(:admitted, :source, :reason, keyword_init: true) do
@@ -28,13 +28,20 @@ class SourceGate
   MISSING_SOURCE = :missing_source
   UNREGISTERED_SOURCE = :unregistered_source
   DISABLED_SOURCE = :disabled_source
+  PAUSED_SOURCE = :paused_source
   MISSING_URL = :missing_url
   DOMAIN_NOT_ALLOWED = :domain_not_allowed
 
-  attr_reader :registry
+  # `paused` is the set of source ids the score has stopped (Archive
+  # #paused_source_ids). A paused source is a registered, enabled source whose
+  # fetching was switched off by the auto-pause, so the refusal is reported as
+  # paused rather than disabled: config still says enabled, and the pause is
+  # reversible from the admin console.
+  attr_reader :registry, :paused
 
-  def initialize(registry: SourceRegistry.current)
+  def initialize(registry: SourceRegistry.current, paused: [])
     @registry = registry
+    @paused = Array(paused).map(&:to_s).freeze
   end
 
   # Admits a candidate hash carrying "source" (the registry name it claims) and
@@ -72,8 +79,14 @@ class SourceGate
     source = registry.find(text)
     return decision(false, nil, UNREGISTERED_SOURCE) unless source
     return decision(false, source, DISABLED_SOURCE) unless source.enabled?
+    return decision(false, source, PAUSED_SOURCE) if paused_source?(source)
 
     decision(true, source, nil)
+  end
+
+  # True when this entry's fetching is paused by the source score.
+  def paused_source?(source)
+    paused.include?(source.id)
   end
 
   # The registry spelling of a source name, or nil when it is not admitted.

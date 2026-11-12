@@ -135,17 +135,22 @@ TestReport.run do
            "the super_admin saw a different member count"
   end
 
-  check "the Sources section is a labelled placeholder, not a dead link" do
+  check "the Sources section reports the archive and links to the source list" do
     session = signed_in_session(SEED[:admin])
     session.get("/admin")
     body = session.last_response.body
 
     section = section_html(body, "console-sources")
     assert section, "the page has no sources section: #{body[0, 800]}"
-    assert section.include?("Source management arrives with the source registry"),
-           "the sources placeholder explains nothing: #{section}"
-    assert section.include?("Not available yet"), "the sources section is not labelled as unavailable: #{section}"
-    assert !section.include?("<a "), "the sources section is a link: #{section}"
-    assert !body.include?("/admin/sources"), "the page points at a route that does not exist"
+    assert section.include?('href="/admin/sources"'),
+           "the sources section does not link to the source list: #{section}"
+    # With no archive in this suite the section must say so rather than fail;
+    # with one it counts the sources. Either way it is a real section now, not
+    # the "not available yet" placeholder.
+    readable = section.include?('id="console-sources-unavailable"') ||
+      section.include?('id="console-count-sources"') ||
+      section.include?('id="console-sources-empty"')
+    assert readable, "the sources section reports no state at all: #{section}"
+    assert !section.include?("Not available yet"), "the sources section is still a placeholder: #{section}"
   end
 end

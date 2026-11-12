@@ -22,6 +22,15 @@ Rails.application.routes.draw do
         patch :state
       end
     end
+
+    # The source list, plus the one write it offers: resuming a source the
+    # quality score paused. Everything else about a source lives in
+    # config/sources.yml, so it is changed there, not here.
+    resources :sources, only: [:index] do
+      member do
+        patch :resume
+      end
+    end
   end
 
   # The public front door: no session, no store.

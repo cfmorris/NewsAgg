@@ -4,15 +4,17 @@ require "uri"
 require_relative "archive"
 require_relative "quality_score"
 require_relative "source_materializer"
+require_relative "source_scoring"
 
 # Validates importer-contract records and writes them to the Neo4j archive.
 class ImportRecords
   REQUIRED = %w[url title summary depth publisher source external_id].freeze
 
-  def initialize(archive: Archive.new, registry: nil, materializer: nil)
+  def initialize(archive: Archive.new, registry: nil, materializer: nil, scoring: nil)
     @archive = archive
     @registry = registry
     @materializer = materializer
+    @scoring = scoring
   end
 
   def call(records)
@@ -37,10 +39,19 @@ class ImportRecords
     # incremented) once the batch is written. A replay recomputes the same
     # total, which is what keeps repeated imports from double-counting.
     @archive.recompute_source_costs
+    # The decayed quality score and article count are recomputed from the same
+    # articles, and a source that has fallen below the floor is paused here -
+    # after the articles are written, so the pause is based on this batch too.
+    score_sources
     normalized.length
   end
 
   private
+
+  def score_sources
+    scoring = @scoring || SourceScoring.new(archive: @archive)
+    scoring.call
+  end
 
   # The article contract carries a 1-100 quality score plus the status that says
   # where it came from. Normalizing here means no record - including one

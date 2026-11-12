@@ -85,6 +85,12 @@ class LobstersDisposableArchive
     0
   end
 
+  # The real archive reads each source's scored articles here; this stand-in has
+  # no source nodes, so an empty input set pauses nothing.
+  def source_quality_inputs
+    []
+  end
+
   def import(records)
     records.each do |record|
       existing = @rows.find { |row| row["url"] == record["url"] }

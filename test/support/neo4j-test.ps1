@@ -5,6 +5,7 @@ param(
     "test/integration/repeat_import_test.rb",
     "test/integration/source_materialisation_test.rb",
     "test/integration/source_cost_test.rb",
+    "test/integration/source_score_neo4j_test.rb",
     "test/acceptance/source_registry_roundtrip_acceptance_test.rb"
   )
 )
