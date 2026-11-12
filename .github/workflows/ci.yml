@@ -65,6 +65,9 @@ jobs:
       - name: Account page integration test
         shell: pwsh
         run: bundle exec ruby test/integration/account_page_test.rb
+      - name: Admin console integration test
+        shell: pwsh
+        run: bundle exec ruby test/integration/admin_console_test.rb
       - name: Dashboard integration test
         shell: pwsh
         run: bundle exec ruby test/integration/dashboard_test.rb

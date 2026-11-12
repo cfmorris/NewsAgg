@@ -1,0 +1,39 @@
+<main class="account" aria-labelledby="console-title">
+  <small id="edition">Admin console</small>
+  <h1 id="console-title">Admin console</h1>
+  <p class="account-lede">
+    What this installation holds today. Every number below is counted from the
+    accounts table the moment this page is opened.
+  </p>
+
+  <section class="account-section" id="console-users" aria-labelledby="console-users-title">
+    <h2 id="console-users-title">Users</h2>
+
+    <dl class="account-details">
+      <% User::ROLES.each do |role| %>
+        <div class="account-detail">
+          <dt><%= role_label(role) %> accounts</dt>
+          <dd id="console-count-<%= role.tr("_", "-") %>"><%= @summary[:counts][role] %></dd>
+        </div>
+      <% end %>
+      <div class="account-detail">
+        <dt>Disabled accounts</dt>
+        <dd id="console-count-disabled"><%= @summary[:disabled] %></dd>
+      </div>
+    </dl>
+
+    <p class="account-note">
+      <%= link_to "Manage accounts", admin_users_path %> — roles and the disabled
+      state are changed there.
+    </p>
+  </section>
+
+  <section class="account-section" id="console-sources" aria-labelledby="console-sources-title">
+    <h2 id="console-sources-title">Sources</h2>
+
+    <p class="account-note" aria-disabled="true">
+      <strong>Not available yet.</strong>
+      Source management arrives with the source registry.
+    </p>
+  </section>
+</main>
