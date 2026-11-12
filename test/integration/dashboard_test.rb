@@ -167,6 +167,27 @@ TestReport.run do
     end
   end
 
+  # The archive pane shows articles and nothing else. The count stays in the DOM
+  # because three things hang off #count — the live region, the focus target
+  # dashboard.js moves after a filter update, and the results section's
+  # accessible name — so it is hidden rather than removed. The page indicator
+  # had no such dependants and is gone; the nav's aria-current carries the page.
+  check "the results count is visually hidden and the page indicator is gone" do
+    response = request.get("/dashboard", auth)
+    assert(response.ok?, "expected HTTP 200, got #{response.status}")
+
+    count = response.body[/<h2[^>]*\bid="count"[^>]*>/]
+    assert(count, "the dashboard has no results count element")
+    assert(count.include?('class="visually-hidden"'), "the results count is still visible: #{count}")
+    assert(count.include?('aria-live="polite"'), "the results count lost its live region: #{count}")
+    assert(count.include?('tabindex="-1"'), "the results count lost its focus target: #{count}")
+    assert(response.body.include?('<section class="results" aria-labelledby="count">'),
+           "the results section is no longer named by the count")
+
+    assert(!response.body.include?('id="page-indicator"'), "the page indicator is still in the markup")
+    assert(!response.body.include?("Page 1 of 1"), "the page indicator text is still rendered")
+  end
+
   check "the search input is named without a visible label" do
     response = request.get("/dashboard", auth)
     input = response.body[/<input[^>]*\bid="search"[^>]*>/]

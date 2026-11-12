@@ -62,6 +62,13 @@ def link_with_text(html, label)
   nil
 end
 
+# The label of the pagination control marked as the current page. The page
+# indicator was removed, so the nav's aria-current is the page the reader is on.
+def current_page_label(html)
+  label = html[%r{<span[^>]*aria-current="page"[^>]*>(.*?)</span>}m, 1]
+  label && CGI.unescapeHTML(label.gsub(/<[^>]+>/, "")).strip
+end
+
 # The href of the first anchor whose stripped text starts with the given label
 # and whose opening tag carries the given CSS class.
 def filter_anchor(html, label, css_class)
@@ -112,7 +119,9 @@ TestReport.run do
       "page 3 rendered #{article_cards(response.body).length} cards, expected 10")
     assert(article_titles(response.body) == (50...60).map { |index| "Article #{index}" },
       "page 3 rendered #{article_titles(response.body).inspect}")
-    assert(response.body.include?("Page 3 of 3"), "page indicator missing for page 3")
+    assert(current_page_label(response.body) == "3",
+      "the current page is marked #{current_page_label(response.body).inspect} on page 3")
+
     assert(response.body.include?("60 articles"), "the filtered total should still read 60 articles")
   end
 
@@ -121,7 +130,8 @@ TestReport.run do
     assert(response.ok?, "expected HTTP 200, got #{response.status}")
     assert(article_titles(response.body) == (50...60).map { |index| "Article #{index}" },
       "page 4 rendered #{article_titles(response.body).inspect} instead of the last page")
-    assert(response.body.include?("Page 3 of 3"), "page 4 was not clamped to page 3")
+    assert(current_page_label(response.body) == "3",
+      "page 4 was not clamped to page 3: the current page is #{current_page_label(response.body).inspect}")
   end
 
   check "a page below 1 renders the first page" do
@@ -133,12 +143,21 @@ TestReport.run do
       "page -3 rendered #{article_titles(negative.body).inspect}")
   end
 
-  check "the page indicator reflects the filtered set" do
+  # The page indicator is gone; the nav's aria-current still says which page the
+  # reader is on, and it counts the filtered set rather than the whole archive.
+  check "the page nav reflects the filtered set" do
     response = request.get("/dashboard?topic=#{CGI.escape("AI & ML")}", auth)
     assert(response.body.include?("30 articles · AI &amp; ML"),
       "the filtered count should read 30 articles for the topic")
     assert(!response.body.include?("60 articles"), "the filtered count leaked the unfiltered total")
-    assert(response.body.include?("Page 1 of 2"), "the page indicator should count the filtered pages")
+    assert(current_page_label(response.body) == "1",
+      "the current page is marked #{current_page_label(response.body).inspect} on the filtered first page")
+    href = link_with_text(response.body, "2")
+    assert(href, "the filtered set should offer a page 2 link")
+    assert(query_of(href)["topic"] == "AI & ML", "the page link dropped the topic filter: #{href}")
+    assert(!link_with_text(response.body, "3"),
+      "the filtered set offered a page 3 link, so the nav counted the wrong pages")
+    assert(!response.body.include?("Page 1 of 2"), "the page indicator is still rendered")
   end
 
   check "a topic filter survives the page links" do
