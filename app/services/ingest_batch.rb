@@ -1,8 +1,10 @@
 require "time"
 require "uri"
 
+require_relative "article_chunker"
 require_relative "article_extractor"
 require_relative "deepseek_summarizer"
+require_relative "long_form"
 require_relative "quality_score"
 require_relative "safe_fetcher"
 require_relative "source_gate"
@@ -144,19 +146,22 @@ class IngestBatch
         raise "Article has no usable publisher" if publisher.empty?
         raise "Article text is too short" if extracted[:text].to_s.length < 40
 
-        model_calls += 1
         summary = @summarizer.summarize(
           url: final_url, title: title, publisher: publisher, text: extracted[:text]
         )
-        @meter&.record(summaries: 1, cost_usd: summary["cost_usd"].to_f)
+        model_calls += summary_calls(summary)
+        @meter&.record(summaries: summary_calls(summary), cost_usd: summary["cost_usd"].to_f)
         usage = summary["usage"].is_a?(Hash) ? summary["usage"] : {}
+        metadata = ArticleChunker.metadata(summary["strategy"], summary["chunk_count"])
         record = valid_record(
           "url" => final_url,
           "title" => title,
           "summary" => summary["summary"],
           "depth" => summary["depth"],
           "publisher" => publisher,
-          "topics" => summary["topics"],
+          # Subject topics come from the model; the long-form tag is decided
+          # from the length that was extracted and is added here.
+          "topics" => LongForm.topics(summary["topics"], extracted[:text].to_s.length),
           # The gate decided the source; nothing is defaulted here.
           "source" => story["source"],
           "external_id" => story["external_id"].to_s,
@@ -164,6 +169,8 @@ class IngestBatch
           "published_date" => extracted[:published_date],
           "quality_score" => summary["quality_score"],
           "quality_status" => summary["quality_status"],
+          "summary_strategy" => metadata["summary_strategy"],
+          "summary_chunk_count" => metadata["summary_chunk_count"],
           "summary_cost_usd" => summary["cost_usd"].to_f,
           "summary_input_tokens" => usage["prompt_tokens"].to_i,
           "summary_output_tokens" => usage["completion_tokens"].to_i,
@@ -212,6 +219,14 @@ class IngestBatch
     status = quality.status unless QualityScore::STATUSES.include?(status)
 
     { "quality_score" => quality.value, "quality_status" => status }
+  end
+
+  # How many provider calls one article cost. A chunked document answers with
+  # its chunk calls plus the synthesis; a summarizer that does not report a
+  # count cost one call.
+  def summary_calls(summary)
+    calls = summary["model_calls"].to_i
+    calls.positive? ? calls : 1
   end
 
   def failure_reason(error)
