@@ -1365,3 +1365,95 @@ body.auth-embedded { background-image: none; background-color: var(--surface) }
 .auth-card #error_explanation h2 { margin: 0 0 .3rem; color: var(--danger-text); font-size: .8rem }
 .auth-card #error_explanation ul { margin: 0; padding-left: 1.1rem }
 .auth-card #error_explanation li { margin: .1rem 0 }
+
+/* Admin: accounts table ---------------------------------------------------
+   The page lives inside <main> so it gets the same gutter as every other
+   screen. Rows are one line tall: the actions cell lays its two forms out as a
+   flex row, overriding the global `select, input { display: block; width: 100% }`
+   stretch that used to stack them. On narrow viewports the card scrolls
+   sideways rather than making every row three lines tall. */
+
+.admin-users-page { max-width: 1180px }
+
+.admin-summary { margin: .1rem 0 1.3rem; color: var(--text-muted); font-size: .85rem }
+
+.admin-users-card {
+  padding: .5rem .25rem .25rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow-x: auto;
+}
+
+table.admin-users {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .92rem;
+}
+
+/* Headers sit on the same left edge and padding as their values, and every
+   value cell stays on one line; only the email column may wrap. */
+table.admin-users th,
+table.admin-users td {
+  padding: .58rem .75rem;
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+table.admin-users th {
+  color: var(--text-muted);
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+table.admin-users td { color: var(--text-body) }
+
+table.admin-users tbody tr + tr td { border-top: 1px solid var(--border) }
+table.admin-users tbody tr:hover td { background: var(--surface-raised) }
+
+/* Keep the email column wide enough for a normal address so the table scrolls
+   inside its card on narrow screens instead of wrapping every row to 3-4 lines. */
+table.admin-users td.admin-users-email { min-width: 24rem; white-space: normal; overflow-wrap: anywhere }
+
+table.admin-users td.admin-users-created { color: var(--text-muted) }
+
+/* One horizontal row: select, Change role, Disable. Never wraps; when the
+   viewport is too narrow the card scrolls sideways instead of growing taller. */
+
+.row-actions { display: flex; flex-wrap: nowrap; align-items: center; gap: .4rem }
+
+.row-actions form { display: flex; align-items: center; gap: .4rem; margin: 0 }
+
+.row-actions select,
+.row-actions input[type="submit"] {
+  width: auto;
+  margin: 0;
+  padding: .3rem .55rem;
+  font-size: .82rem;
+  cursor: pointer;
+}
+
+.row-actions input[type="submit"] {
+  background: var(--surface-raised);
+  border-color: var(--border-strong);
+  transition: background-color .16s ease, border-color .16s ease;
+}
+
+.row-actions input[type="submit"]:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-control);
+}
+
+/* Disable reads as the destructive state; Enable stays neutral. */
+.row-actions input[type="submit"][value="Disable"] {
+  color: var(--danger-text);
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+}
+.row-actions input[type="submit"][value="Disable"]:hover { border-color: var(--danger-text) }
