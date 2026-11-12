@@ -32,6 +32,9 @@ needs a session, so keep the server bound to loopback as well.
 The importer accepts a JSON array from standard input. Each row has a canonical
 `url`, `title`, `summary`, `depth`, `publisher`, `topics` array, `source`,
 `external_id`, and optional `discovery_url` and `published_date` (YYYY-MM-DD).
+An optional `quality_score` (1-100) and `quality_status` are recorded with the
+row; a row without one takes the documented default of 50 marked `default`, and
+an off-scale number is clamped into 1..100 marked `clamped`.
 A second discovery for the same canonical URL adds a discovery link and reuses
 the original summary.
 
@@ -126,6 +129,42 @@ once. Sources are matched without an `enabled` filter, so a source disabled in
 config keeps the historical cost of the articles it already contributed.
 `bin/recompute-source-costs` runs the same aggregation standalone as a backfill.
 
+#### Article quality score
+
+Every summary also carries a **1-100 quality score**, so the dashboard can rank
+articles instead of treating them as equally worth reading. The summarizer's
+system prompt states the rubric the model must apply: 90-100 is a landmark
+analysis, 70-89 specific and current, 50-69 ordinary coverage, 30-49 thin or
+promotional, 1-29 filler. The score is returned in the same JSON object as the
+summary, so it costs nothing extra.
+
+The article stores it as `quality_score` (an integer on the 1-100 scale) beside
+`quality_status`, which says where the number came from:
+
+- `ok` — the model returned a score on the scale.
+- `clamped` — the model returned a number outside the scale; it is clamped into
+  1..100 rather than discarded (0 becomes 1, 101 becomes 100).
+- `default` — the score was missing or not a number; the article takes the
+  documented fallback of **50**, the midpoint, so it is neither promoted nor
+  buried by a quality sort.
+
+A clamp or fallback never fails a story: the substitution is logged as
+`Article quality score ... is outside 1-100; clamped to ...` or `... recorded the
+default of 50` alongside the run's other messages, and `quality_status` keeps it
+visible in the data. Records replayed from an older retry file are normalized the
+same way, so a batch written before scoring existed still imports.
+
+Both fields are written on create only, next to `summary_cost_usd`, so
+re-importing or re-scoring an article keeps the score and the cost the first
+import paid for — a replay never double-charges.
+
+`GET /articles` carries `quality_score` and `quality_status` on every row (null
+for articles written before scoring existed). The dashboard shows `Quality 87`
+on each article card, marked `(clamped)` or `(default)` when the value was
+substituted, and the topic sidebar's **Sort** block offers `Newest first` and
+`Highest quality`. The quality order puts the highest score first, keeps ties in
+the archive's own order, and places unscored articles last.
+
 #### Daily budget and the Neo4j breaker
 
 Auto-pull keeps its policy state in `tmp/auto-pull.state.json`: the current day,
@@ -198,6 +237,7 @@ bundle exec ruby test/integration/dashboard_test.rb
 bundle exec ruby test/integration/dashboard_pagination_test.rb
 bundle exec ruby test/integration/infographic_test.rb
 bundle exec ruby test/integration/ingestion_test.rb
+bundle exec ruby test/integration/quality_score_test.rb
 bundle exec ruby test/integration/source_registry_test.rb
 bundle exec ruby test/acceptance/source_allowlist_acceptance_test.rb
 bundle exec ruby test/integration/auto_pull_test.rb
@@ -232,7 +272,13 @@ The next exercises Rails rendering, server-side filtering and counts, the Turbo
 stream ETag, and the Auto-pull endpoint. The second runs the Ruby ingestion
 pipeline against recorded Hacker News and article fixtures, a fake DeepSeek
 endpoint, and a disposable in-memory archive, including retry handling and secret
-redaction. The source registry test loads the committed allowlist and proves
+redaction. The quality score test pins the 1-100 seam end to end: the prompt
+carries the rubric, a stub provider returning 87 stores 87, 0 and 101 are clamped
+to 1 and 100 and logged, a missing or non-numeric score falls back to the
+documented default of 50 and is logged, a replayed import keeps the first score
+and cost, `GET /articles` carries both fields, the card shows the score, and a
+quality sort ranks mixed scored and unscored articles. The source registry test
+loads the committed allowlist and proves
 every malformed case refuses to boot — unknown or missing kind, missing or
 non-http url, duplicate name, unknown key, bad types — and that an unlisted
 source never appears and an empty list stays empty. The source gate test proves

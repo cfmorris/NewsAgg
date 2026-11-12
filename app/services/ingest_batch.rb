@@ -3,6 +3,7 @@ require "uri"
 
 require_relative "article_extractor"
 require_relative "deepseek_summarizer"
+require_relative "quality_score"
 require_relative "safe_fetcher"
 require_relative "source_gate"
 require_relative "url_key"
@@ -151,6 +152,8 @@ class IngestBatch
           "external_id" => story["external_id"].to_s,
           "discovery_url" => story["discovery_url"],
           "published_date" => extracted[:published_date],
+          "quality_score" => summary["quality_score"],
+          "quality_status" => summary["quality_status"],
           "summary_cost_usd" => summary["cost_usd"].to_f,
           "summary_input_tokens" => usage["prompt_tokens"].to_i,
           "summary_output_tokens" => usage["completion_tokens"].to_i,
@@ -186,7 +189,18 @@ class IngestBatch
     return nil unless record["topics"].is_a?(Array) && !record["topics"].empty?
     return nil unless record["topics"].all? { |topic| topic.is_a?(String) && !topic.strip.empty? }
 
-    record.merge("url" => url)
+    record.merge("url" => url).merge(quality_attributes(record))
+  end
+
+  # A record replayed from the retry file may predate quality scoring, so the
+  # score is normalized here too: the archive always receives an integer on the
+  # 1-100 scale and a status that says whether the model produced it.
+  def quality_attributes(record)
+    quality = QualityScore.normalize(record["quality_score"])
+    status = record["quality_status"].to_s
+    status = quality.status unless QualityScore::STATUSES.include?(status)
+
+    { "quality_score" => quality.value, "quality_status" => status }
   end
 
   def failure_reason(error)

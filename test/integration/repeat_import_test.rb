@@ -59,6 +59,8 @@ first_batch = [
     "external_id" => "7001",
     "discovery_url" => "https://news.ycombinator.com/item?id=7001",
     "published_date" => published_date,
+    "quality_score" => 87,
+    "quality_status" => "ok",
     "summary_cost_usd" => 0.000123,
     "summary_input_tokens" => 1200,
     "summary_output_tokens" => 300,
@@ -90,7 +92,9 @@ repost = {
   "summary_cost_usd" => 0.99,
   "summary_input_tokens" => 9999,
   "summary_output_tokens" => 9999,
-  "summary_cache_read_tokens" => 9999
+  "summary_cache_read_tokens" => 9999,
+  "quality_score" => 12,
+  "quality_status" => "ok"
 }.freeze
 
 def snapshot(archive, base)
@@ -151,6 +155,13 @@ check "a repost preserves the original summary and title" do
   assert(first["title"] == "Original title", "title changed to #{first["title"].inspect}")
 end
 
+check "a repost never replaces the stored quality score" do
+  assert(first["quality_score"] == 87,
+    "a repost rescored the article to #{first["quality_score"].inspect}")
+  assert(first["quality_status"] == "ok",
+    "a repost changed the quality status to #{first["quality_status"].inspect}")
+end
+
 check "published and archive dates are reported as distinct fields" do
   assert(first["published_date"] == published_date,
     "published_date was #{first["published_date"].inspect}")
@@ -163,6 +174,11 @@ check "published and archive dates are reported as distinct fields" do
   assert(Time.iso8601(first["archive_timestamp"]).iso8601 == first["archive_timestamp"],
     "archive_timestamp was #{first["archive_timestamp"].inspect}")
   assert(second["published_date"].nil?, "second article should have no published date")
+end
+
+check "an import records the quality score and how it was derived" do
+  assert(first["quality_score"] == 87, "quality_score was #{first["quality_score"].inspect}")
+  assert(first["quality_status"] == "ok", "quality_status was #{first["quality_status"].inspect}")
 end
 
 check "an import records the summary cost, tokens and timestamp" do
@@ -197,6 +213,11 @@ check "an article imported without cost fields reads as null, not zero" do
   assert(second["summary_output_tokens"].nil?, "legacy summary_output_tokens was #{second["summary_output_tokens"].inspect}")
   assert(second["summary_cache_read_tokens"].nil?,
     "legacy summary_cache_read_tokens was #{second["summary_cache_read_tokens"].inspect}")
+end
+
+check "an article imported without a score reads as null, not zero" do
+  assert(second["quality_score"].nil?, "legacy quality_score should be null, got #{second["quality_score"].inspect}")
+  assert(second["quality_status"].nil?, "legacy quality_status should be null, got #{second["quality_status"].inspect}")
 end
 
 if $failures.empty?

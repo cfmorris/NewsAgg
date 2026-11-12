@@ -3,9 +3,11 @@ require "uri"
 
 require_relative "article_extractor"
 require_relative "http_client"
+require_relative "quality_score"
 require_relative "taxonomy"
 
-# Asks DeepSeek for a three-sentence summary, technical depth and safe topics.
+# Asks DeepSeek for a three-sentence summary, technical depth, safe topics and a
+# 1-100 quality score.
 class DeepseekSummarizer
   class SummaryError < StandardError; end
 
@@ -19,11 +21,12 @@ class DeepseekSummarizer
   CACHE_HIT_USD_PER_MILLION = 0.07
   TOKENS_PER_MILLION = 1_000_000.0
 
-  def initialize(env: ENV, http: HttpClient.new, topics: Taxonomy.load)
+  def initialize(env: ENV, http: HttpClient.new, topics: Taxonomy.load, log: nil)
     @env = env
     @http = http
     @topics = topics
     @extractor = ArticleExtractor.new
+    @log = log || ->(message) { warn(message) }
     configure!
   end
 
@@ -66,8 +69,11 @@ class DeepseekSummarizer
     topics = Array(parsed["topics"]).filter_map { |value| @allowed[value.to_s.strip.downcase] }.uniq.first(5)
     raise SummaryError, "Summary provider returned no known topics." if topics.empty?
 
+    quality = quality_for(parsed["quality_score"])
+
     usage = usage_for(parsed)
     { "summary" => summary, "depth" => depth, "topics" => topics,
+      "quality_score" => quality.value, "quality_status" => quality.status,
       "usage" => usage, "cost_usd" => usage["cost_usd"] }
   end
 
@@ -104,6 +110,12 @@ class DeepseekSummarizer
       "Return one JSON object with exactly these keys:",
       '  "summary": exactly three plain-text sentences describing what the article reports.',
       '  "depth": one of "Overview", "Technical analysis", "Deep dive".',
+      '  "quality_score": one integer from 1 to 100 rating how much the article itself rewards a',
+      "  technical reader. Use this rubric: 90-100 a landmark analysis worth reading in full;",
+      "  70-89 specific, current and substantive; 50-69 ordinary coverage with some substance;",
+      "  30-49 thin, recycled or largely promotional; 1-29 filler or an aggregation stub.",
+      "  Judge the article's own substance, not the publisher's reputation or how popular it was.",
+      "  Always return a whole number, never a decimal, a range or a word.",
       '  "topics": one to five strings chosen only from this list:',
       "  #{@topics.join(", ")}.",
       "Do not include markdown, HTML, links, or extra keys."
@@ -153,6 +165,23 @@ class DeepseekSummarizer
   def canonical_depth(value)
     wanted = value.to_s.strip.downcase
     DEPTHS.find { |depth| depth.downcase == wanted }
+  end
+
+  # A missing or off-scale score is normalized rather than raised: losing a paid
+  # summary over a bad number would cost more than recording the fallback. The
+  # substitution is logged and travels with the record as quality_status.
+  def quality_for(raw)
+    quality = QualityScore.normalize(raw)
+    return quality if quality.ok?
+
+    if quality.default?
+      @log.call("Article quality score is missing or not a number " \
+        "(#{@extractor.clean_text(raw.to_s, 40).inspect}); recorded the default of #{QualityScore::DEFAULT}.")
+    else
+      @log.call("Article quality score #{@extractor.clean_text(raw.to_s, 40).inspect} is outside " \
+        "#{QualityScore::MIN}-#{QualityScore::MAX}; clamped to #{quality.value}.")
+    end
+    quality
   end
 
   def timeout_from(value)

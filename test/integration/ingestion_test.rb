@@ -119,7 +119,8 @@ class FakeHttp
         "It extracts publisher metadata before asking the configured model for a summary. " \
         "Failed stories are kept in a retry file for the next run.",
       depth: "Technical analysis",
-      topics: ["Software Engineering", "Prompt Injection"]
+      topics: ["Software Engineering", "Prompt Injection"],
+      quality_score: 92
     )
     response = { "choices" => [{ "message" => { "content" => content } }] }
     response["usage"] = @usage if @usage
@@ -184,6 +185,13 @@ TestReport.run do
         "cache-read tokens were #{record["summary_cache_read_tokens"].inspect}")
       assert(archive.cost_recomputations.positive?,
         "the import did not recompute the per-source cost")
+    end
+
+    check "an imported record carries the provider's quality score" do
+      record = archive.articles.find { |row| row["url"] == "https://news.example/story" }
+      assert(record, "the summarizable story was not imported")
+      assert(record["quality_score"] == 92, "quality_score was #{record["quality_score"].inspect}")
+      assert(record["quality_status"] == "ok", "quality_status was #{record["quality_status"].inspect}")
     end
 
     check "a failed story is written to the retry file without secrets" do
@@ -290,6 +298,10 @@ TestReport.run do
         "the retry record's cost was #{record["summary_cost_usd"].inspect}")
       assert(record["summary_input_tokens"] == 700,
         "the retry record's input tokens were #{record["summary_input_tokens"].inspect}")
+      assert(record["quality_score"] == QualityScore::DEFAULT,
+        "a retry record written before scoring existed did not take the default: #{record["quality_score"].inspect}")
+      assert(record["quality_status"] == "default",
+        "the defaulted score's status was #{record["quality_status"].inspect}")
     end
   end
 end

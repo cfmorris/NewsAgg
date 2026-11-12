@@ -2,7 +2,13 @@
   <small id="edition">News archive</small>
   <p id="intro"<% if @archive_error %> class="notice notice-error" role="alert"<% end %>><%= @archive_error || "Browse the archive by subject, publisher, discovery source, or technical depth." %></p>
 
-  <form id="filter-form" method="get" action="/dashboard" data-turbo-frame="dashboard" data-turbo-action="advance"></form>
+  <form id="filter-form" method="get" action="/dashboard" data-turbo-frame="dashboard" data-turbo-action="advance">
+    <%# The sort is a reading preference, not a filter, so a filter change
+        submitted by this form carries it along instead of resetting it. %>
+    <% unless @filter.sort == DashboardFilter::DEFAULT_SORT %>
+      <input form="filter-form" type="hidden" name="sort" value="<%= @filter.sort %>">
+    <% end %>
+  </form>
 
   <div class="quick-filters" role="search" aria-label="Search the archive">
     <label>Search articles
@@ -71,6 +77,20 @@
               <% end %>
             </div>
             </nav>
+
+            <div class="sort-block" id="sort-block">
+              <h2>Sort</h2>
+              <nav aria-label="Sort articles">
+                <% DashboardFilter::SORTS.each_key do |key| %>
+                  <%= link_to filter_link(sort: key == DashboardFilter::DEFAULT_SORT ? nil : key, page: nil),
+                    class: "bar sort-option",
+                    data: { turbo_frame: "dashboard" },
+                    "aria-pressed" => (@filter.sort == key).to_s do %>
+                    <span><%= DashboardFilter::SORTS.fetch(key) %></span>
+                  <% end %>
+                <% end %>
+              </nav>
+            </div>
 
             <div class="date-block" id="date-block">
               <h2>Date added</h2>
