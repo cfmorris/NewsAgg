@@ -98,6 +98,9 @@ jobs:
       - name: Source gate integration test
         shell: pwsh
         run: bundle exec ruby test/integration/source_gate_test.rb
+      - name: Source allowlist acceptance test
+        shell: pwsh
+        run: bundle exec ruby test/acceptance/source_allowlist_acceptance_test.rb
       - name: Auto-pull integration test
         shell: pwsh
         run: bundle exec ruby test/integration/auto_pull_test.rb
@@ -127,7 +130,7 @@ jobs:
           abort "Expected a redirect to sign-in, got #{dashboard.status}" unless dashboard.status == 302 &&
             dashboard["Location"].to_s.include?("/users/sign_in")
           '@ | bundle exec ruby
-      - name: Neo4j integration tests (repeat import, source materialisation, source cost)
+      - name: Neo4j integration tests (repeat import, source materialisation, source cost, registry acceptance)
         shell: pwsh
         run: pwsh -NoProfile -File ./test/support/neo4j-test.ps1
 

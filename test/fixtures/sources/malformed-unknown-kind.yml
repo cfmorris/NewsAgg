@@ -1,0 +1,6 @@
+# Malformed on purpose: `kind` must be rss or api.
+sources:
+  - id: acceptance-podcast
+    name: Acceptance Podcast
+    kind: podcast
+    url: https://podcast.acceptance.test/feed
