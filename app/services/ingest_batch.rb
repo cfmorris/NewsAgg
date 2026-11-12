@@ -38,6 +38,7 @@ class IngestBatch
     archive_urls, archived_discussions = archive_keys(archive_rows)
     candidates = {}
     skipped = 0
+    skipped_no_article = 0
 
     Array(retry_entries).each do |entry|
       retry_entry = normalize_retry(entry)
@@ -93,6 +94,15 @@ class IngestBatch
     candidates.each_value do |candidate|
       story = candidate[:story]
       key = UrlKey.call(story["url"])
+
+      # A candidate with no external article (a Lobsters self-post) cannot
+      # produce a record: count it as skipped rather than fetching its
+      # discussion page as if it were an article, or queueing a retry that can
+      # never succeed.
+      if candidate[:record].nil? && story["fetch"] == false
+        skipped_no_article += 1
+        next
+      end
 
       # Ask before each story that needs a summary, so a run stops cleanly at
       # the cap and leaves the rest of the list for the next day.
@@ -172,7 +182,8 @@ class IngestBatch
     end
 
     { records: records, failures: failures, skipped_archived: skipped,
-      model_calls: model_calls, budget_stopped: budget_stopped, source_gate: report }
+      skipped_no_article: skipped_no_article, model_calls: model_calls,
+      budget_stopped: budget_stopped, source_gate: report }
   end
 
   def valid_record(record)
