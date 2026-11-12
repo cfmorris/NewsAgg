@@ -48,13 +48,6 @@ class SourceRegistry
       freeze
     end
 
-    # The stable identifier used wherever a source is referenced (Neo4j node
-    # identity, reporting keys). It is a slug, optionally declared explicitly,
-    # so renaming the display `name` does not change what the source is.
-    def slug
-      id
-    end
-
     def enabled?
       @enabled
     end
@@ -155,11 +148,6 @@ class SourceRegistry
     ENV.fetch("NEWSAGG_SOURCES_PATH", DEFAULT_PATH)
   end
 
-  # All entries, enabled or not: the explicit allowlist as configured.
-  def sources
-    entries
-  end
-
   # Only entries that may contribute candidates.
   def enabled
     enabled_entries
@@ -173,19 +161,9 @@ class SourceRegistry
     enabled_entries.map(&:name)
   end
 
-  def size
-    entries.length
-  end
-  alias length size
-
   def empty?
     entries.empty?
   end
-
-  def each(&block)
-    entries.each(&block)
-  end
-  include Enumerable
 
   def find(name)
     wanted = name.to_s.strip
