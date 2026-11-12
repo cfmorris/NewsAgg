@@ -1,6 +1,15 @@
 Rails.application.routes.draw do
   devise_for :users
 
+  namespace :admin do
+    resources :users, only: [:index] do
+      member do
+        patch :role
+        patch :state
+      end
+    end
+  end
+
   root "dashboard#show"
   get "/articles", to: "dashboard#articles"
   get "/dashboard/stream", to: "dashboard#stream"

@@ -1,0 +1,42 @@
+<h1>Accounts</h1>
+
+<p class="admin-summary">
+  Signed in as <%= current_actor.email %> (<%= current_actor.role.tr("_", " ") %>).
+</p>
+
+<table class="admin-users">
+  <thead>
+    <tr>
+      <th scope="col">Email</th>
+      <th scope="col">Role</th>
+      <th scope="col">Status</th>
+      <th scope="col">Created</th>
+      <th scope="col">Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    <% @users.each do |user| %>
+      <tr>
+        <td><%= user.email %></td>
+        <td><%= user.role.tr("_", " ") %></td>
+        <td><%= user.disabled? ? "disabled" : "active" %></td>
+        <td><%= user.created_at.strftime("%Y-%m-%d %H:%M") %></td>
+        <td>
+          <% if current_actor.super_admin? %>
+            <%= form_with url: role_admin_user_path(user), method: :patch, local: true do %>
+              <%= select_tag :role,
+                             options_for_select(User::ROLES.map { |role| [role.tr("_", " "), role] }, user.role),
+                             id: "role-#{user.id}" %>
+              <%= submit_tag "Change role", name: nil %>
+            <% end %>
+          <% end %>
+
+          <%= form_with url: state_admin_user_path(user), method: :patch, local: true do %>
+            <%= hidden_field_tag :state, user.disabled? ? "enable" : "disable" %>
+            <%= submit_tag(user.disabled? ? "Enable" : "Disable", name: nil) %>
+          <% end %>
+        </td>
+      </tr>
+    <% end %>
+  </tbody>
+</table>

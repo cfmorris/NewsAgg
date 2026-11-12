@@ -50,6 +50,12 @@ jobs:
       - name: Database integration test
         shell: pwsh
         run: bundle exec ruby test/integration/database_test.rb
+      - name: Authentication integration test
+        shell: pwsh
+        run: bundle exec ruby test/integration/authentication_test.rb
+      - name: Roles and admin area integration test
+        shell: pwsh
+        run: bundle exec ruby test/integration/admin_roles_test.rb
       - name: Dashboard integration test
         shell: pwsh
         run: bundle exec ruby test/integration/dashboard_test.rb
