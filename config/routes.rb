@@ -2,7 +2,7 @@ Rails.application.routes.draw do
   # Sessions are Devise's, with one addition: an account that signs in with MFA
   # on posts its password to /users/sign_in and its six-digit code to the step
   # below, which is why the sign-in controller is the app's own.
-  devise_for :users, controllers: { sessions: "users/sessions" }
+  devise_for :users, controllers: { sessions: "users/sessions", registrations: "users/registrations" }
 
   # Step two of an MFA sign-in. It lives under /users/sign_in so the landing
   # page's overlay can frame it like the rest of the Devise screens, and it is

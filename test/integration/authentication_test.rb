@@ -86,6 +86,11 @@ TestReport.run do
     session.delete("/users/sign_out")
 
     assert session.last_response.status == 302, "sign-out should redirect, got #{session.last_response.status}"
+
+    # Signing out is silent too: no "Signed out successfully." banner.
+    session.follow_redirect!
+    assert !session.last_response.body.include?("successfully"),
+           "signing out still shows a notice"
     assert !signed_in?(session), "the session survived sign-out"
   end
 

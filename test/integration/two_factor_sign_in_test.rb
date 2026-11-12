@@ -104,6 +104,17 @@ TestReport.run do
            "the code step sent the reader to #{response['Location']}")
     assert(signed_in?(session), "a valid code did not establish a session")
 
+    # The code step completes the sign-in in the app's own controller, so this
+    # is where a leftover welcome notice would show: the dashboard must not
+    # carry one.
+    session.follow_redirect!
+    assert(session.last_response.status == 200,
+           "the dashboard answered #{session.last_response.status} after the code step")
+    assert(!session.last_response.body.include?("successfully"),
+           "the code step landed on the dashboard with a welcome notice")
+    assert(!session.last_response.body.include?("Welcome!"),
+           "the code step landed on the dashboard with a welcome notice")
+
     session.get("/dashboard")
     assert(session.last_response.status == 200,
            "the dashboard answered #{session.last_response.status} after signing in")
