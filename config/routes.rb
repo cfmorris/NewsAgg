@@ -1,5 +1,15 @@
 Rails.application.routes.draw do
-  devise_for :users
+  # Sessions are Devise's, with one addition: an account that signs in with MFA
+  # on posts its password to /users/sign_in and its six-digit code to the step
+  # below, which is why the sign-in controller is the app's own.
+  devise_for :users, controllers: { sessions: "users/sessions" }
+
+  # Step two of an MFA sign-in. It lives under /users/sign_in so the landing
+  # page's overlay can frame it like the rest of the Devise screens, and it is
+  # declared inside devise_scope so Devise's controller knows its mapping.
+  devise_scope :user do
+    post "/users/sign_in/two_factor", to: "users/sessions#two_factor", as: :user_two_factor
+  end
 
   namespace :admin do
     # The console's front door. It is the namespace root, so /admin/users and

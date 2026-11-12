@@ -12,10 +12,16 @@ class ApplicationController < ActionController::Base
   # JSON format, so a fetch() caller gets 401 instead of a redirect it would
   # silently follow into the sign-in page.
   def require_session!
-    return true if user_signed_in?
     # Devise's own screens manage authentication themselves: signing in and
-    # registering are exactly what a guest is allowed to do.
+    # registering are exactly what a guest is allowed to do. The order matters.
+    # user_signed_in? asks Warden, Warden runs the sign-in strategies, and on a
+    # POST to the sign-in route those strategies read the posted email and
+    # password. Asked first, this line would authenticate the credentials
+    # before the controller gets to decide, and an account that owes a code
+    # fails that pre-flight check for the missing otp_attempt - charging it a
+    # failed attempt on a sign-in whose password was right.
     return true if devise_controller?
+    return true if user_signed_in?
 
     if request.format.json?
       render json: { error: "unauthorized" }, status: :unauthorized

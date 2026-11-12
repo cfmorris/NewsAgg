@@ -53,6 +53,9 @@ jobs:
       - name: Authentication integration test
         shell: pwsh
         run: bundle exec ruby test/integration/authentication_test.rb
+      - name: Two-factor sign-in integration test
+        shell: pwsh
+        run: bundle exec ruby test/integration/two_factor_sign_in_test.rb
       - name: Roles and admin area integration test
         shell: pwsh
         run: bundle exec ruby test/integration/admin_roles_test.rb
