@@ -1,0 +1,33 @@
+# config/sources.yml — the single explicit source allowlist.
+#
+# Every source the app may ingest from must be listed here. There is no
+# built-in default and no self-discovery: a source that is not in this file is
+# never fetched. A missing, empty, or malformed file aborts boot.
+#
+# Per-entry keys (any other key is a boot-time error, so typos cannot hide):
+#   name             required, unique (compared case-insensitively), the source
+#                    identifier carried on every article it contributes
+#   kind             required, "rss" or "api"
+#   url              required, absolute http(s) feed or API base URL
+#   enabled          optional boolean, default true; false stops the source
+#                    contributing entirely
+#   max_items        optional positive integer, default 25; most candidates the
+#                    source may contribute per run
+#   min_words        optional integer >= 0, default 0; shortest article text the
+#                    source will accept
+#   domains          optional host allow list for links this source yields;
+#                    empty means no host restriction. "*." matches the base
+#                    domain and any subdomain, e.g. "*.example.com"
+#   exclude_domains  optional host deny list; always wins over domains
+#   owner            optional, null or an owner id; null reserved for the shared
+#                    sources, set for future per-owner paid sources
+sources:
+  - name: Hacker News
+    kind: api
+    url: https://hacker-news.firebaseio.com/v0
+    enabled: true
+    max_items: 10
+    min_words: 40
+    domains: []
+    exclude_domains: []
+    owner: null

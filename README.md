@@ -78,6 +78,21 @@ web process on the same checkout from pulling alongside the first.
 The supervisor boots from `config.ru`, so `rails runner` and the console never
 start a puller. Set `NEWSAGG_AUTO_PULL=0` to keep the web process from pulling.
 
+#### Source allowlist
+
+`config/sources.yml` is the single explicit list of ingest sources. Every entry
+declares `name`, `kind` (`rss` or `api`), `url`, `enabled`, `max_items`,
+`min_words`, `domains`/`exclude_domains`, and `owner` (null for the shared
+sources, an owner id for future per-owner paid ones). Hacker News is the only
+source listed and enabled today.
+
+The file is parsed and validated at boot: a missing file, unknown or missing
+`kind`, missing or non-http `url`, duplicate `name`, unknown key, or malformed
+value aborts boot with the file path, the entry index, and the reason. There is
+no built-in source and no discovery fallback — an unlisted source is never
+fetched, and an empty `sources:` list yields an empty registry rather than a
+default feed. Set `NEWSAGG_SOURCES_PATH` to load a different file.
+
 #### Daily budget and the Neo4j breaker
 
 Auto-pull keeps its policy state in `tmp/auto-pull.state.json`: the current day,
@@ -148,6 +163,7 @@ bundle exec ruby test/integration/dashboard_test.rb
 bundle exec ruby test/integration/dashboard_pagination_test.rb
 bundle exec ruby test/integration/infographic_test.rb
 bundle exec ruby test/integration/ingestion_test.rb
+bundle exec ruby test/integration/source_registry_test.rb
 bundle exec ruby test/integration/auto_pull_test.rb
 bundle exec ruby test/integration/auto_pull_budget_test.rb
 ```
@@ -171,8 +187,12 @@ The next exercises Rails rendering, server-side filtering and counts, the Turbo
 stream ETag, and the Auto-pull endpoint. The second runs the Ruby ingestion
 pipeline against recorded Hacker News and article fixtures, a fake DeepSeek
 endpoint, and a disposable in-memory archive, including retry handling and secret
-redaction. The third drives the in-process Auto-pull supervisor with a fake
-ingestion runner and a short interval: immediate pull on enable, the next tick,
+redaction. The source registry test loads the committed allowlist and proves
+every malformed case refuses to boot — unknown or missing kind, missing or
+non-http url, duplicate name, unknown key, bad types — and that an unlisted
+source never appears and an empty list stays empty. The third drives the
+in-process Auto-pull supervisor with a fake ingestion runner and a short
+interval: immediate pull on enable, the next tick,
 stopping on disable, skipping an in-flight trigger, the `/auto-pull` payload, the
 single-process pid lock, and the boot reset that clears a leftover flag before
 anything pulls while leaving the policy state alone. The fourth pins the budget
