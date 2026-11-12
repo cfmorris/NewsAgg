@@ -38,7 +38,12 @@ class Archive
       UNWIND $records AS row
       MERGE (article:NewsArticle {url: row.url})
       ON CREATE SET article.title = row.title, article.summary = row.summary,
-                    article.depth = row.depth, article.added_at = datetime()
+                    article.depth = row.depth, article.added_at = datetime(),
+                    article.summary_cost_usd = row.summary_cost_usd,
+                    article.summary_input_tokens = row.summary_input_tokens,
+                    article.summary_output_tokens = row.summary_output_tokens,
+                    article.summary_cache_read_tokens = row.summary_cache_read_tokens,
+                    article.summarized_at = datetime()
       SET article.published_date = coalesce(row.published_date, article.published_date)
       MERGE (publisher:NewsPublisher {name: row.publisher})
       MERGE (article)-[:PUBLISHED_BY]->(publisher)
@@ -58,6 +63,11 @@ class Archive
       RETURN article.title AS title, article.url AS url, article.summary AS summary,
              article.depth AS depth, toString(article.added_at) AS added_at,
              article.published_date AS published_date,
+             article.summary_cost_usd AS summary_cost_usd,
+             article.summary_input_tokens AS summary_input_tokens,
+             article.summary_output_tokens AS summary_output_tokens,
+             article.summary_cache_read_tokens AS summary_cache_read_tokens,
+             toString(article.summarized_at) AS summarized_at,
              [(article)-[:PUBLISHED_BY]->(p) | p.name][0] AS publisher,
              [(article)-[:TAGGED_WITH]->(t) | t.name] AS topics,
              [(article)-[:TAGGED_WITH]->(t)-[:BROAD_MATCH]->(s:NewsSubject) |
