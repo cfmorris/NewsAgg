@@ -1043,3 +1043,79 @@ turbo-frame[busy] #count {
   color: var(--on-accent);
 }
 .landing-action:last-child:hover { background: var(--accent-fill-hover) }
+
+/* The account page: the stored details in a definition list, then the two
+   things an account may change. Same palette; each form lives in its own card
+   so a validation error lands next to the fields that caused it. */
+
+.account { max-width: 46rem }
+.account-lede { max-width: 38rem; color: var(--text-body) }
+
+.account-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: .9rem 1.4rem;
+  margin: 1.6rem 0 0;
+  padding: 1.1rem 1.2rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.account-detail { min-width: 0 }
+.account-detail dt {
+  color: var(--text-muted);
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.account-detail dd {
+  margin: .1rem 0 0;
+  color: var(--text);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.account-note { margin: .9rem 0 0; color: var(--text-faint); font-size: .85rem }
+
+.account-section {
+  margin-top: 1.6rem;
+  padding: 1.1rem 1.2rem 1.35rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+.account-section h2 { margin-top: 0 }
+
+.account-form { max-width: 26rem }
+.account-form small { display: block; margin-top: .2rem; color: var(--text-faint) }
+
+.account-form input[type="submit"] {
+  width: auto;
+  margin-top: 1.15rem;
+  padding: .5rem 1.1rem;
+  font-weight: 600;
+  background: var(--accent-fill);
+  border-color: #3f6fe0;
+  color: var(--on-accent);
+  cursor: pointer;
+}
+.account-form input[type="submit"]:hover { background: var(--accent-fill-hover); border-color: var(--accent) }
+
+.form-errors {
+  margin: .9rem 0 0;
+  padding: .55rem .8rem .55rem 1.9rem;
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-sm);
+  color: var(--danger-text);
+  font-size: .85rem;
+}
+.form-errors li { margin: .15rem 0 }
+
+@media (max-width: 620px) {
+  .account-details { grid-template-columns: 1fr }
+}

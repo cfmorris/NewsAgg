@@ -1,0 +1,10 @@
+<%# Devise's own messages for the form that failed, so a wrong current password,
+    a taken address, a short password or a mismatched confirmation all say so
+    next to the fields that caused them. %>
+<% if errors.present? %>
+  <ul class="form-errors" role="alert">
+    <% errors.full_messages.each do |message| %>
+      <li><%= message %></li>
+    <% end %>
+  </ul>
+<% end %>

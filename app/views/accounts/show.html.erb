@@ -1,0 +1,72 @@
+<main class="account" aria-labelledby="account-title">
+  <small id="edition">Account</small>
+  <h1 id="account-title">Your account</h1>
+  <p class="account-lede">The details this account signs in with, and the two things it may change.</p>
+
+  <dl class="account-details">
+    <div class="account-detail">
+      <dt>Email</dt>
+      <dd id="account-email"><%= @account.email %></dd>
+    </div>
+    <div class="account-detail">
+      <dt>Role</dt>
+      <dd id="account-role"><%= role_label(@account.role) %></dd>
+    </div>
+    <div class="account-detail">
+      <dt>Joined</dt>
+      <dd id="account-joined"><%= @account.created_at.strftime("%Y-%m-%d") %></dd>
+    </div>
+    <div class="account-detail">
+      <dt>Last sign-in</dt>
+      <dd id="account-last-sign-in"><%= @account.last_sign_in_at ? @account.last_sign_in_at.strftime("%Y-%m-%d %H:%M") : "—" %></dd>
+    </div>
+    <div class="account-detail">
+      <dt>Sign-ins</dt>
+      <dd id="account-sign-in-count"><%= @account.sign_in_count %></dd>
+    </div>
+    <div class="account-detail">
+      <dt>Status</dt>
+      <dd id="account-status"><%= @account.disabled? ? "disabled" : "active" %></dd>
+    </div>
+  </dl>
+
+  <p class="account-note">
+    The role is set by an administrator and cannot be changed here.
+  </p>
+
+  <section class="account-section" id="change-email" aria-labelledby="change-email-title">
+    <h2 id="change-email-title">Change email</h2>
+    <%= render "form_errors", errors: (@errors if @failed_form == :email_form) %>
+
+    <%= form_with scope: :user, url: account_email_path, method: :patch, local: true,
+                  html: { class: "account-form" } do |form| %>
+      <%= form.label :email, "New email address" %>
+      <%= form.email_field :email, value: @email_value, autocomplete: "email", required: true %>
+
+      <%= form.label :current_password, "Current password" %>
+      <%= form.password_field :current_password, autocomplete: "current-password", required: true %>
+
+      <%= form.submit "Update email" %>
+    <% end %>
+  </section>
+
+  <section class="account-section" id="change-password" aria-labelledby="change-password-title">
+    <h2 id="change-password-title">Change password</h2>
+    <%= render "form_errors", errors: (@errors if @failed_form == :password_form) %>
+
+    <%= form_with scope: :user, url: account_password_path, method: :patch, local: true,
+                  html: { class: "account-form" } do |form| %>
+      <%= form.label :password, "New password" %>
+      <%= form.password_field :password, autocomplete: "new-password", required: true %>
+      <small>At least 8 characters.</small>
+
+      <%= form.label :password_confirmation, "Confirm the new password" %>
+      <%= form.password_field :password_confirmation, autocomplete: "new-password", required: true %>
+
+      <%= form.label :current_password, "Current password" %>
+      <%= form.password_field :current_password, autocomplete: "current-password", required: true %>
+
+      <%= form.submit "Update password" %>
+    <% end %>
+  </section>
+</main>
