@@ -519,6 +519,39 @@ TestReport.run do
     assert(JSON.parse(disable.body)["enabled"] == false, "flag was not disabled")
   end
 
+  check "GET /articles exposes summary cost for priced rows and null for legacy rows" do
+    priced = article(
+      "title" => "Priced article", "url" => "https://example.test/priced",
+      "summary_cost_usd" => 0.00041, "summary_input_tokens" => 1000,
+      "summary_output_tokens" => 200, "summary_cache_read_tokens" => 400,
+      "summarized_at" => "2026-11-11T12:00:00Z"
+    )
+    legacy = article(
+      "title" => "Legacy article", "url" => "https://example.test/legacy",
+      "summary_cost_usd" => nil, "summary_input_tokens" => nil,
+      "summary_output_tokens" => nil, "summary_cache_read_tokens" => nil
+    )
+    Rails.application.config.x.archive_factory = -> { FakeArchive.new([priced, legacy]) }
+
+    response = request.get("/articles", host)
+    assert(response.ok?, "expected HTTP 200, got #{response.status}")
+    payload = JSON.parse(response.body)
+    priced_row = payload.find { |row| row["url"] == "https://example.test/priced" }
+    legacy_row = payload.find { |row| row["url"] == "https://example.test/legacy" }
+    assert(priced_row, "the priced article is missing from /articles")
+    assert(legacy_row, "the legacy article is missing from /articles")
+    assert(priced_row["summary_cost_usd"] == 0.00041,
+      "summary_cost_usd was #{priced_row["summary_cost_usd"].inspect}")
+    assert(priced_row["summary_input_tokens"] == 1000,
+      "summary_input_tokens was #{priced_row["summary_input_tokens"].inspect}")
+    assert(legacy_row["summary_cost_usd"].nil?,
+      "a legacy article must report null cost, got #{legacy_row["summary_cost_usd"].inspect}")
+    assert(legacy_row["summary_input_tokens"].nil?,
+      "a legacy article must report null tokens, got #{legacy_row["summary_input_tokens"].inspect}")
+  ensure
+    Rails.application.config.x.archive_factory = -> { FakeArchive.new(rows) }
+  end
+
   check "an unavailable archive still renders the dashboard shell" do
     Rails.application.config.x.archive_factory = -> { UnavailableArchive.new }
     response = request.get("/", host)

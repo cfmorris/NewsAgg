@@ -62,10 +62,17 @@ end
 class FakeHttp
   API = "https://hacker-news.firebaseio.com/v0".freeze
 
+  DEFAULT_USAGE = {
+    "prompt_tokens" => 1000,
+    "prompt_cache_hit_tokens" => 400,
+    "completion_tokens" => 200
+  }.freeze
+
   attr_reader :model_calls
 
-  def initialize(items)
+  def initialize(items, usage: DEFAULT_USAGE)
     @items = items
+    @usage = usage
     @model_calls = 0
   end
 
@@ -93,7 +100,9 @@ class FakeHttp
       depth: "Technical analysis",
       topics: ["Software Engineering", "Prompt Injection"]
     )
-    JSON.generate("choices" => [{ "message" => { "content" => content } }])
+    response = { "choices" => [{ "message" => { "content" => content } }] }
+    response["usage"] = @usage if @usage
+    JSON.generate(response)
   end
 end
 
@@ -141,6 +150,19 @@ TestReport.run do
       assert(http.model_calls == 1, "archived and failed fetches must not call the model")
     end
 
+    check "an imported record carries the exact summary cost and token usage" do
+      record = archive.articles.find { |row| row["url"] == "https://news.example/story" }
+      assert(record, "the summarizable story was not imported")
+      assert(record["summary_cost_usd"] == 0.00041,
+        "expected $0.00041 for the fixture usage, got #{record["summary_cost_usd"].inspect}")
+      assert(record["summary_input_tokens"] == 1000,
+        "input tokens were #{record["summary_input_tokens"].inspect}")
+      assert(record["summary_output_tokens"] == 200,
+        "output tokens were #{record["summary_output_tokens"].inspect}")
+      assert(record["summary_cache_read_tokens"] == 400,
+        "cache-read tokens were #{record["summary_cache_read_tokens"].inspect}")
+    end
+
     check "a failed story is written to the retry file without secrets" do
       retry_entries = JSON.parse(File.read(retry_path))
       assert(retry_entries.length == 1, "expected one retry entry")
@@ -162,11 +184,89 @@ TestReport.run do
       assert(http.model_calls == 2, "expected exactly one extra model call")
     end
 
+    third_code = runner_for.call(archive, http, FixtureFetcher.new(article_html, allow_broken: true))
+      .run(feed: "new", limit: 5)
+
+    check "a batch over an already-archived feed performs no model call" do
+      assert(third_code.zero?, "expected exit code 0, got #{third_code}")
+      assert(http.model_calls == 2,
+        "an archived story was summarized again (#{http.model_calls} model calls, expected 2)")
+    end
+
     check "the imported records drive the Rails dashboard filter" do
       filter = DashboardFilter.new(archive.articles, ActionController::Parameters.new(q: "fails once"))
       assert(filter.visible.length == 1, "expected one matching article, got #{filter.visible.length}")
       assert(filter.count_text.start_with?("1 article"), "wrong count text #{filter.count_text.inspect}")
       assert(filter.visible.first["topics"] == ["Software Engineering"], "topics did not survive import")
+    end
+
+    # A provider response with no usage block must not abort the import; it
+    # simply costs nothing as far as this call can tell.
+    unpriced_archive = DisposableArchive.new(archive_rows)
+    unpriced_http = FakeHttp.new(items, usage: nil)
+    unpriced_code = runner_for.call(unpriced_archive, unpriced_http, FixtureFetcher.new(article_html))
+      .run(feed: "new", limit: 5)
+
+    check "a summary without a usage block imports with zero cost and zero tokens" do
+      assert(unpriced_code == 1, "expected exit code 1 for the kept retry, got #{unpriced_code}")
+      record = unpriced_archive.articles.find { |row| row["url"] == "https://news.example/story" }
+      assert(record, "the story was not imported without a usage block")
+      assert(record["summary_cost_usd"] == 0.0,
+        "expected 0.0 cost, got #{record["summary_cost_usd"].inspect}")
+      assert(record["summary_input_tokens"] == 0,
+        "input tokens were #{record["summary_input_tokens"].inspect}")
+      assert(record["summary_output_tokens"] == 0,
+        "output tokens were #{record["summary_output_tokens"].inspect}")
+      assert(record["summary_cache_read_tokens"] == 0,
+        "cache-read tokens were #{record["summary_cache_read_tokens"].inspect}")
+    end
+
+    # A retry entry written by a failed import already carries its summary, so
+    # replaying it must import the record without paying for it again.
+    completed_record = {
+      "url" => "https://retry.example/already-summarized",
+      "title" => "A completed summary waiting in the retry file",
+      "summary" => "This article was summarized before its import failed. " \
+        "The retry file kept the finished record so the next batch could import it. " \
+        "No second model call should ever be needed for it.",
+      "depth" => "Overview",
+      "publisher" => "Retry Press",
+      "topics" => ["Software Engineering"],
+      "source" => "Hacker News",
+      "external_id" => "8899",
+      "discovery_url" => "https://news.ycombinator.com/item?id=8899",
+      "summary_cost_usd" => 0.00025,
+      "summary_input_tokens" => 700,
+      "summary_output_tokens" => 150,
+      "summary_cache_read_tokens" => 200
+    }
+    completed_retry_path = File.join(directory, "retry-with-record.json")
+    File.write(completed_retry_path, JSON.generate([{
+      "story" => {
+        "url" => completed_record["url"], "title" => completed_record["title"],
+        "source" => "Hacker News", "external_id" => "8899",
+        "discovery_url" => completed_record["discovery_url"]
+      },
+      "record" => completed_record,
+      "attempts" => 1
+    }]))
+    replay_runner = IngestionRunner.new(
+      archive: archive, retry_path: completed_retry_path, http: http,
+      fetcher: FixtureFetcher.new(article_html), summarizer: DeepseekSummarizer.new(env: provider_env, http: http),
+      now: -> { Time.utc(2026, 11, 11, 12, 0, 0) }, out: StringIO.new, err: StringIO.new, env: provider_env
+    )
+    replay_code = replay_runner.run(feed: "new", limit: 5)
+
+    check "a retry entry carrying a record imports it without calling the model" do
+      assert(replay_code.zero?, "expected exit code 0, got #{replay_code}")
+      assert(http.model_calls == 2,
+        "the completed retry entry was summarized again (#{http.model_calls} model calls, expected 2)")
+      record = archive.articles.find { |row| row["url"] == completed_record["url"] }
+      assert(record, "the completed retry record was not imported")
+      assert(record["summary_cost_usd"] == 0.00025,
+        "the retry record's cost was #{record["summary_cost_usd"].inspect}")
+      assert(record["summary_input_tokens"] == 700,
+        "the retry record's input tokens were #{record["summary_input_tokens"].inspect}")
     end
   end
 end
