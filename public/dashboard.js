@@ -283,3 +283,114 @@
   appliedVersion = versionFromDom();
   window.setTimeout(poll, 15_000);
 })();
+/* The landing page's sign-in overlay ---------------------------------------
+   The two calls to action stay ordinary links: without JavaScript they navigate
+   to the Devise screens. This upgrades them. The dialog holds an iframe of the
+   same Devise page with ?embedded=1, so the form keeps its CSRF token and
+   renders its errors where it always does. Escape, the close control and a
+   backdrop click close it, and focus goes back to the link that opened it.
+   Delegated listeners keep it working after Turbo replaces the page. */
+(function () {
+  if (window.__newsaggAuthOverlay) return;
+  window.__newsaggAuthOverlay = true;
+
+  var lastTrigger = null;
+
+  function overlay() {
+    return document.getElementById("auth-overlay");
+  }
+
+  function frameOf(root) {
+    return root ? root.querySelector(".auth-overlay-frame") : null;
+  }
+
+  function focusFrame(root) {
+    var frame = frameOf(root);
+    if (!root || root.hidden || !frame) return;
+    try { frame.contentWindow.focus(); } catch (_) {}
+  }
+
+  // Escape pressed inside the frame never reaches the parent document, so the
+  // frame's own document carries the same listener.
+  function bindFrame(root) {
+    var frame = frameOf(root);
+    if (!frame || root.hidden) return;
+    try {
+      var doc = frame.contentDocument;
+      if (doc && !doc.__newsaggOverlayKeys) {
+        doc.__newsaggOverlayKeys = true;
+        doc.addEventListener("keydown", function (event) {
+          if (event.key === "Escape") close();
+        });
+      }
+      // Land the caret on the first field so the form is usable as soon as the
+      // frame paints.
+      var field = doc && doc.querySelector("input[autofocus], input:not([type=hidden]), button");
+      if (field) {
+        field.focus();
+        return;
+      }
+    } catch (_) {}
+    focusFrame(root);
+  }
+
+  function open(link) {
+    var root = overlay();
+    var frame = frameOf(root);
+    var title = document.getElementById("auth-overlay-title");
+    var source = link.getAttribute("data-auth-overlay-src") || link.getAttribute("href");
+    if (!root || !frame || !source) return;
+
+    lastTrigger = link;
+    var label = link.getAttribute("data-auth-overlay") === "sign-up" ? "Create account" : "Sign in";
+    if (title) title.textContent = label;
+    frame.title = label + " to NewsAgg";
+    frame.onload = function () { bindFrame(root); };
+    frame.src = source;
+
+    root.hidden = false;
+    document.body.classList.add("auth-overlay-open");
+    var closeButton = root.querySelector("[data-auth-overlay-close]");
+    if (closeButton) closeButton.focus();
+    else focusFrame(root);
+  }
+
+  function close() {
+    var root = overlay();
+    if (!root || root.hidden) return;
+    root.hidden = true;
+    document.body.classList.remove("auth-overlay-open");
+    var frame = frameOf(root);
+    if (frame) {
+      frame.onload = null;
+      frame.src = "about:blank";
+    }
+    if (lastTrigger && lastTrigger.isConnected) lastTrigger.focus();
+    lastTrigger = null;
+  }
+
+  document.addEventListener("click", function (event) {
+    if (!event.target || !event.target.closest) return;
+
+    var link = event.target.closest("[data-auth-overlay]");
+    if (link) {
+      // Modified clicks and the href fallback keep their native behaviour.
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      open(link);
+      return;
+    }
+
+    var root = overlay();
+    if (!root || root.hidden) return;
+    // The close control, or the backdrop around the dialog.
+    if (event.target.closest("[data-auth-overlay-close]") || event.target === root) {
+      event.preventDefault();
+      close();
+    }
+  });
+
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape") close();
+  });
+})();

@@ -8,9 +8,18 @@
       <%= link_to "Go to dashboard", dashboard_path, class: "landing-action" %>
     </p>
   <% else %>
+    <%# Both calls to action are ordinary links: without JavaScript they navigate
+        to the Devise screens, and dashboard.js upgrades them to open the
+        floating overlay instead. Each link names the embedded source its frame
+        loads. %>
     <p class="landing-actions">
-      <%= link_to "Sign in", new_user_session_path, class: "landing-action" %>
-      <%= link_to "Create account", new_user_registration_path, class: "landing-action" %>
+      <%= link_to "Sign in", new_user_session_path, class: "landing-action",
+        aria: { haspopup: "dialog" },
+        data: { auth_overlay: "sign-in", auth_overlay_src: "#{new_user_session_path}?embedded=1" } %>
+      <%= link_to "Create account", new_user_registration_path, class: "landing-action",
+        aria: { haspopup: "dialog" },
+        data: { auth_overlay: "sign-up", auth_overlay_src: "#{new_user_registration_path}?embedded=1" } %>
     </p>
+    <%= render "landing/auth_overlay" %>
   <% end %>
 </main>

@@ -1,6 +1,12 @@
 <h2>Log in</h2>
 
-<%= form_for(resource, as: resource_name, url: session_path(resource_name)) do |f| %>
+<%# Inside the landing page's overlay the marker rides in a hidden field, not in
+    the form action: a query string in the action would invalidate Devise's
+    per-form CSRF token, and the failure re-render with it. Turbo is off inside
+    the frame too, so a failed attempt renders its error in place. %>
+<%= form_for(resource, as: resource_name, url: session_path(resource_name),
+      data: (embedded_auth? ? { turbo: "false" } : {})) do |f| %>
+  <%= hidden_field_tag :embedded, "1" if embedded_auth? %>
   <div class="field">
     <%= f.label :email %><br />
     <%= f.email_field :email, autofocus: true, autocomplete: "email" %>
