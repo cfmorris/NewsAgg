@@ -1,0 +1,5 @@
+# Malformed on purpose: every entry needs an absolute http(s) url.
+sources:
+  - id: acceptance-no-url
+    name: Acceptance No Url
+    kind: rss

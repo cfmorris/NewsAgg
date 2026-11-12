@@ -1,0 +1,21 @@
+# Fixture allowlist for the source registry acceptance suite.
+#
+# One enabled feed with domain rules, one enabled API source, and one disabled
+# feed that must never contribute a candidate. Nothing here is Hacker News, so
+# the suite also proves no built-in source sneaks in behind the allowlist.
+sources:
+  - id: acceptance-alpha
+    name: Acceptance Alpha
+    kind: rss
+    url: https://alpha.acceptance.test/feed
+    max_items: 5
+    domains: ["alpha.acceptance.test"]
+  - id: acceptance-beta
+    name: Acceptance Beta
+    kind: api
+    url: https://beta.acceptance.test/items
+  - id: acceptance-dormant
+    name: Acceptance Dormant
+    kind: rss
+    url: https://dormant.acceptance.test/feed
+    enabled: false

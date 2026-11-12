@@ -199,6 +199,7 @@ bundle exec ruby test/integration/dashboard_pagination_test.rb
 bundle exec ruby test/integration/infographic_test.rb
 bundle exec ruby test/integration/ingestion_test.rb
 bundle exec ruby test/integration/source_registry_test.rb
+bundle exec ruby test/acceptance/source_allowlist_acceptance_test.rb
 bundle exec ruby test/integration/auto_pull_test.rb
 bundle exec ruby test/integration/auto_pull_budget_test.rb
 ```

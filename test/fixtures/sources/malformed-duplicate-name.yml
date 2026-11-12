@@ -1,0 +1,10 @@
+# Malformed on purpose: names are unique case-insensitively.
+sources:
+  - id: acceptance-twin
+    name: Acceptance Twin
+    kind: rss
+    url: https://twin.acceptance.test/feed
+  - id: acceptance-twin-copy
+    name: acceptance twin
+    kind: rss
+    url: https://twin-copy.acceptance.test/feed
