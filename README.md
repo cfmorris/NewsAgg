@@ -93,6 +93,15 @@ no built-in source and no discovery fallback — an unlisted source is never
 fetched, and an empty `sources:` list yields an empty registry rather than a
 default feed. Set `NEWSAGG_SOURCES_PATH` to load a different file.
 
+Every import also materialises the allowlist as one `NewsSource` node per entry
+in Neo4j, keyed by `name` and written with an idempotent `MERGE`, so importing
+twice leaves exactly one node per source. Config owns the policy fields (`kind`,
+`url`, `enabled`, `owner`, `max_items`, `min_words`, `domains`,
+`exclude_domains`) plus the `override` flag and `override_keys` list that name
+the settings departing from their defaults; the node owns the accumulated facts
+`article_count`, `cost_usd` and `quality_score`, which are seeded at 0 on create
+and preserved on every later sync — a re-import never wipes them.
+
 #### Daily budget and the Neo4j breaker
 
 Auto-pull keeps its policy state in `tmp/auto-pull.state.json`: the current day,

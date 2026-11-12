@@ -23,6 +23,17 @@ class DisposableArchive
 
   def map_fast_subjects(_mappings); end
 
+  # The real archive upserts NewsSource nodes here; this stand-in records them
+  # so the pipeline can be exercised without a live Neo4j.
+  def sync_sources(sources)
+    (@synced_sources ||= []).concat(sources)
+    sources.length
+  end
+
+  def synced_sources
+    @synced_sources || []
+  end
+
   def import(records)
     records.each do |record|
       existing = @rows.find { |row| row["url"] == record["url"] }
