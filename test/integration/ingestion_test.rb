@@ -34,6 +34,16 @@ class DisposableArchive
     @synced_sources || []
   end
 
+  # The real archive recomputes each NewsSource.cost_usd from the imported
+  # articles; this stand-in has no source nodes, so it records the call instead.
+  def recompute_source_costs
+    @cost_recomputations = (@cost_recomputations || 0) + 1
+  end
+
+  def cost_recomputations
+    @cost_recomputations || 0
+  end
+
   def import(records)
     records.each do |record|
       existing = @rows.find { |row| row["url"] == record["url"] }
@@ -172,6 +182,8 @@ TestReport.run do
         "output tokens were #{record["summary_output_tokens"].inspect}")
       assert(record["summary_cache_read_tokens"] == 400,
         "cache-read tokens were #{record["summary_cache_read_tokens"].inspect}")
+      assert(archive.cost_recomputations.positive?,
+        "the import did not recompute the per-source cost")
     end
 
     check "a failed story is written to the retry file without secrets" do

@@ -30,6 +30,10 @@ class ImportRecords
     end
     @archive.map_fast_subjects(mappings) unless mappings.empty?
     records.each_slice(100) { |batch| @archive.import(batch) }
+    # Per-source cost is derived from the articles, so it is recomputed (not
+    # incremented) once the batch is written. A replay recomputes the same
+    # total, which is what keeps repeated imports from double-counting.
+    @archive.recompute_source_costs
     records.length
   end
 
