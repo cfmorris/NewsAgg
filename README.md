@@ -181,6 +181,7 @@ bundle exec ruby test/integration/sign_in_gate_test.rb
 bundle exec ruby test/integration/top_bar_test.rb
 bundle exec ruby test/integration/auth_overlay_test.rb
 bundle exec ruby test/integration/two_factor_sign_in_test.rb
+bundle exec ruby test/integration/mfa_flow_test.rb
 bundle exec ruby test/integration/asset_charset_test.rb
 bundle exec ruby test/integration/dashboard_test.rb
 bundle exec ruby test/integration/dashboard_pagination_test.rb
@@ -205,7 +206,12 @@ in the frame. The two-factor test covers sign-in for an account with MFA on:
 the password step asks for the six-digit code instead of signing in, a valid
 code finishes the sign-in, a wrong one fails in place without charging a
 failed attempt or locking the account, and an account with MFA off still signs
-in with one POST. The asset
+in with one POST. The MFA flow test is the end-to-end seam between enrolment
+and sign-in: an account turns MFA on through `/account` with the key the page
+printed, signs in with a code generated from that key, is refused wrong codes
+without a failed attempt or a lockout, turns MFA off and signs in with one POST
+again, and no other account's page shows the key, the setup URI, or that MFA is
+on. The asset
 charset test checks that `/dashboard.css`, `/dashboard.js` and `/turbo.js`
 declare UTF-8 and that the stylesheet's glyphs still reach the client as the
 same UTF-8 bytes.
