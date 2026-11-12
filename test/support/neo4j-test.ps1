@@ -1,6 +1,10 @@
 [CmdletBinding()]
 param(
-  [switch]$Keep
+  [switch]$Keep,
+  [string[]]$Tests = @(
+    "test/integration/repeat_import_test.rb",
+    "test/integration/source_materialisation_test.rb"
+  )
 )
 
 $ErrorActionPreference = "Stop"
@@ -136,8 +140,12 @@ dbms.usage_report.enabled=false
 
   Push-Location $RepoRoot
   try {
-    & bundle exec ruby test/integration/repeat_import_test.rb
-    $TestExitCode = $LASTEXITCODE
+    $TestExitCode = 0
+    foreach ($test in $Tests) {
+      Write-Host "Running $test against the disposable Neo4j"
+      & bundle exec ruby $test
+      if ($LASTEXITCODE -ne 0) { $TestExitCode = $LASTEXITCODE }
+    }
   } finally {
     Pop-Location
   }

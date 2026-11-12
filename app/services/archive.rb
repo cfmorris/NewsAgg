@@ -11,7 +11,8 @@ class Archive
     "CREATE CONSTRAINT news_article_url IF NOT EXISTS FOR (n:NewsArticle) REQUIRE n.url IS UNIQUE",
     "CREATE CONSTRAINT news_publisher_name IF NOT EXISTS FOR (n:NewsPublisher) REQUIRE n.name IS UNIQUE",
     "CREATE CONSTRAINT news_topic_name IF NOT EXISTS FOR (n:NewsTopic) REQUIRE n.name IS UNIQUE",
-    "CREATE CONSTRAINT news_discovery_id IF NOT EXISTS FOR (n:NewsDiscovery) REQUIRE (n.source, n.external_id) IS UNIQUE"
+    "CREATE CONSTRAINT news_discovery_id IF NOT EXISTS FOR (n:NewsDiscovery) REQUIRE (n.source, n.external_id) IS UNIQUE",
+    "CREATE CONSTRAINT news_source_name IF NOT EXISTS FOR (n:NewsSource) REQUIRE n.name IS UNIQUE"
   ].freeze
 
   def prepare
@@ -86,8 +87,61 @@ class Archive
     end
   end
 
-  private
+  # Upserts one NewsSource node per allowlist entry, keyed by name.
+  #
+  # Idempotent: MERGE on the name (backed by the news_source_name constraint)
+  # means a repeated sync updates the same nodes instead of adding new ones.
+  # Config-owned fields are set on every sync, so enabling or disabling a source
+  # in config is reflected on the node. The accumulated fields - article_count,
+  # cost_usd and quality_score - are only seeded on create and are deliberately
+  # absent from the unconditional SET, so a re-import never wipes them.
+  def sync_sources(sources)
+    return 0 if sources.nil? || sources.empty?
 
+    query(<<~CYPHER, { sources: sources }).first.fetch("sources")
+      UNWIND $sources AS row
+      MERGE (source:NewsSource {name: row.name})
+      ON CREATE SET source.article_count = 0,
+                    source.cost_usd = 0.0,
+                    source.quality_score = coalesce(row.quality_score, 0.0),
+                    source.created_at = datetime()
+      SET source.kind = row.kind,
+          source.url = row.url,
+          source.enabled = row.enabled,
+          source.override = row.override,
+          source.override_keys = row.override_keys,
+          source.max_items = row.max_items,
+          source.min_words = row.min_words,
+          source.domains = row.domains,
+          source.exclude_domains = row.exclude_domains,
+          source.synced_at = datetime()
+      FOREACH (present IN CASE WHEN row.owner IS NULL THEN [] ELSE [1] END |
+        SET source.owner = row.owner)
+      FOREACH (absent IN CASE WHEN row.owner IS NULL THEN [1] ELSE [] END |
+        REMOVE source.owner)
+      RETURN count(*) AS sources
+    CYPHER
+  end
+
+  # Every materialised source, for round-trip checks and reporting.
+  def source_nodes
+    query(<<~CYPHER)
+      MATCH (source:NewsSource)
+      RETURN source.name AS name, source.kind AS kind, source.url AS url,
+             source.enabled AS enabled, source.owner AS owner,
+             source.quality_score AS quality_score,
+             source.article_count AS article_count, source.cost_usd AS cost_usd,
+             source.override AS override, source.override_keys AS override_keys,
+             source.max_items AS max_items, source.min_words AS min_words,
+             source.domains AS domains, source.exclude_domains AS exclude_domains,
+             toString(source.synced_at) AS synced_at
+      ORDER BY source.name
+    CYPHER
+  end
+
+  # Runs one Cypher statement against the archive. Public because the
+  # integration tests need to read and seed state the typed accessors above do
+  # not expose.
   def query(statement, parameters = {})
     database = ENV.fetch("NEO4J_DATABASE", "neo4j")
     endpoint = URI.join(ENV.fetch("NEO4J_HTTP_URL", "http://127.0.0.1:7474"), "/db/#{URI.encode_www_form_component(database)}/query/v2")
