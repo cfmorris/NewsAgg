@@ -142,8 +142,11 @@
       </aside>
 
       <section class="results" aria-labelledby="count">
-        <h2 id="count" aria-live="polite" tabindex="-1"><%= @hidden_view ? "#{@filter.count_text} · Hidden" : @filter.count_text %></h2>
-        <p class="page-indicator" id="page-indicator">Page <%= @filter.page %> of <%= @filter.page_count %></p>
+        <%# The count stays in the DOM: dashboard.js focuses it after a filter
+            update, it is the live region that announces the result, and it names
+            this section. The archive pane shows articles and nothing else, so it
+            is clipped out of view rather than rendered. %>
+        <h2 id="count" class="visually-hidden" aria-live="polite" tabindex="-1"><%= @hidden_view ? "#{@filter.count_text} · Hidden" : @filter.count_text %></h2>
         <div id="articles">
           <%= render partial: "article", collection: @filter.page_articles, as: :article,
             locals: { hidden_view: @hidden_view } %>
