@@ -8,3 +8,5 @@ __pycache__/
 /config/master.key
 /config/initializers/secret_token.rb
 /.worktrees/
+/storage/*.sqlite3
+/storage/*.sqlite3-*
