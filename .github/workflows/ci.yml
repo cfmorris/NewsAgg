@@ -39,6 +39,9 @@ jobs:
             ruby -c $file
             if ($LASTEXITCODE) { exit $LASTEXITCODE }
           }
+      - name: Test-double contract (no database, no Neo4j)
+        shell: pwsh
+        run: bundle exec ruby test/integration/fake_archive_contract_test.rb
       - name: Prepare databases
         shell: pwsh
         run: |
