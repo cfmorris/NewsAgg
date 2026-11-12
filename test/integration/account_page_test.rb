@@ -7,6 +7,7 @@ ENV["RAILS_ENV"] = "test"
 
 require "fileutils"
 require "rack/test"
+require "rotp"
 require "tmpdir"
 
 require_relative "../../config/environment"
@@ -70,6 +71,30 @@ end
 
 def form_for_path?(body, path)
   body.match?(%r{<form[^>]*action="#{Regexp.escape(path)}"}m)
+end
+
+# The text of any labelled element, not just the summary's definition values.
+# The MFA status is a paragraph, so `detail` cannot reach it.
+def element_text(body, id)
+  body[%r{<[a-z0-9]+[^>]*id="#{Regexp.escape(id)}"[^>]*>(.*?)</[a-z0-9]+>}m, 1]
+    .to_s.gsub(/<[^>]*>/, "").strip
+end
+
+# The enrolment key the page printed, so a check can generate a code from the
+# secret the reader was shown rather than reaching into the database for it.
+def displayed_key(body)
+  body[%r{<code[^>]*id="mfa-secret"[^>]*>(.*?)</code>}m, 1].to_s.strip
+end
+
+# The code an authenticator app would show for a key right now.
+def totp_code(key)
+  ROTP::TOTP.new(key).now
+end
+
+# A six-digit string that is not the code for this key, so a refusal check can
+# never accidentally post the right number.
+def wrong_totp_code(key)
+  format("%06d", (totp_code(key).to_i + 1) % 1_000_000)
 end
 
 TestReport.run do
@@ -347,5 +372,201 @@ TestReport.run do
     assert session.last_response.status == 200, "the sign-in page answered #{session.last_response.status}"
     assert !session.last_response.body.include?("Change password"),
            "the disabled account was shown the account forms"
+  end
+
+  check "with two-factor off the page offers setup and no disable action" do
+    user = account("mfa-off@example.com")
+    session = signed_in_session(user)
+    session.get("/account")
+    body = session.last_response.body
+
+    assert element_text(body, "account-mfa-status").start_with?("Off"),
+           "the MFA status reads #{element_text(body, 'account-mfa-status').inspect}"
+    assert body.include?("Set up two-factor"), "an MFA-off account has no setup action"
+    assert form_for_path?(body, "/account/two_factor"), "the setup action has no form"
+    assert !body.include?("Disable two-factor"), "an MFA-off account was offered the disable action"
+    assert !body.include?('id="mfa-secret"'), "an MFA-off account was shown a key"
+    assert !user.reload.otp_required_for_login?, "a plain visit turned MFA on"
+  end
+
+  check "starting enrolment prints an otpauth URI and the key without turning MFA on" do
+    user = account("mfa-enrol@example.com")
+    session = signed_in_session(user)
+
+    session.post("/account/two_factor")
+    assert session.last_response.status == 302,
+           "POST /account/two_factor answered #{session.last_response.status}"
+    assert session.last_response["Location"].to_s.end_with?("/account"),
+           "the setup redirected to #{session.last_response['Location'].inspect}"
+
+    session.follow_redirect!
+    body = session.last_response.body
+    key = displayed_key(body)
+
+    assert key.match?(/\A[A-Z2-7]{16,}\z/i), "the page printed #{key.inspect} as the key"
+    assert body.include?("otpauth://totp/"), "the page printed no otpauth URI"
+
+    uri = element_text(body, "mfa-provisioning-uri")
+    assert uri.start_with?("otpauth://totp/"), "the setup URI reads #{uri.inspect}"
+    assert uri.include?(key), "the setup URI does not carry the key the page printed"
+    assert uri.include?("NewsAgg"), "the setup URI names no issuer"
+
+    assert body.include?('name="user[otp_attempt]"'), "there is no confirmation-code field"
+
+    user.reload
+    assert !user.otp_required_for_login?, "enrolment turned MFA on before the code was confirmed"
+    assert user.otp_secret.blank?, "the unconfirmed key was written to the account"
+  end
+
+  check "a code from the printed key turns two-factor on" do
+    user = account("mfa-confirm@example.com")
+    session = signed_in_session(user)
+
+    session.post("/account/two_factor")
+    session.follow_redirect!
+    key = displayed_key(session.last_response.body)
+    assert key.present?, "enrolment printed no key"
+
+    session.patch("/account/two_factor", user: { otp_attempt: totp_code(key) })
+    assert session.last_response.status == 302,
+           "confirming the code answered #{session.last_response.status}"
+    assert session.last_response["Location"].to_s.end_with?("/account"),
+           "the confirmation redirected to #{session.last_response['Location'].inspect}"
+
+    session.follow_redirect!
+    body = session.last_response.body
+
+    assert body.match?(/two-factor authentication is on/i),
+           "no confirmation that MFA is on: #{body[0, 600]}"
+    assert element_text(body, "account-mfa-status").start_with?("On"),
+           "the MFA status reads #{element_text(body, 'account-mfa-status').inspect}"
+    assert body.include?("Disable two-factor"), "the enabled account has no disable action"
+    assert !body.include?('id="mfa-secret"'), "the key is still printed after enrolment"
+
+    user.reload
+    assert user.otp_required_for_login?, "the account still has MFA off"
+    assert user.otp_secret == key, "the stored key differs from the key the page printed"
+  end
+
+  check "a wrong code leaves two-factor off and lets the reader retry" do
+    user = account("mfa-wrong-code@example.com")
+    session = signed_in_session(user)
+
+    session.post("/account/two_factor")
+    session.follow_redirect!
+    key = displayed_key(session.last_response.body)
+
+    session.patch("/account/two_factor", user: { otp_attempt: wrong_totp_code(key) })
+    assert session.last_response.status == 422,
+           "a wrong code answered #{session.last_response.status}"
+    body = session.last_response.body
+    assert body.match?(/did not match/i), "no wrong-code message on the page: #{body[0, 800]}"
+    assert body.include?('id="mfa-secret"'),
+           "the refused attempt hid the key, so there was no way to retry"
+
+    user.reload
+    assert !user.otp_required_for_login?, "a wrong code turned MFA on"
+    assert user.otp_secret.blank?, "a wrong code stored the key"
+
+    session.patch("/account/two_factor", user: { otp_attempt: totp_code(key) })
+    assert session.last_response.status == 302,
+           "the retry with the right code answered #{session.last_response.status}"
+    assert user.reload.otp_required_for_login?, "the retry with the right code did not turn MFA on"
+  end
+
+  check "a malformed code is refused like a wrong one" do
+    user = account("mfa-malformed-code@example.com")
+    session = signed_in_session(user)
+
+    session.post("/account/two_factor")
+    session.follow_redirect!
+
+    ["", "abc123", "12345", "1234567"].each do |code|
+      session.patch("/account/two_factor", user: { otp_attempt: code })
+      assert session.last_response.status == 422,
+             "the code #{code.inspect} answered #{session.last_response.status}"
+      assert !user.reload.otp_required_for_login?, "the code #{code.inspect} turned MFA on"
+    end
+  end
+
+  check "confirming without a pending key cannot turn two-factor on" do
+    user = account("mfa-no-pending@example.com")
+    session = signed_in_session(user)
+
+    session.patch("/account/two_factor", user: { otp_attempt: totp_code(User.generate_otp_secret) })
+    assert session.last_response.status == 302,
+           "a confirmation with no setup answered #{session.last_response.status}"
+    assert session.last_response["Location"].to_s.end_with?("/account"),
+           "a confirmation with no setup redirected to #{session.last_response['Location'].inspect}"
+
+    user.reload
+    assert !user.otp_required_for_login?, "a confirmation with no setup turned MFA on"
+    assert user.otp_secret.blank?, "a confirmation with no setup stored a key"
+  end
+
+  check "turning two-factor off requires the current password" do
+    user = account("mfa-disable@example.com")
+    # Signed in first, then enabled directly: the sign-in path is deliberately
+    # untouched here, because this card is the account page's half of MFA.
+    session = signed_in_session(user)
+    user.update!(otp_secret: User.generate_otp_secret, otp_required_for_login: true)
+    enabled_key = user.otp_secret
+
+    session.get("/account")
+    body = session.last_response.body
+    assert element_text(body, "account-mfa-status").start_with?("On"),
+           "the enabled account shows status #{element_text(body, 'account-mfa-status').inspect}"
+    assert body.include?("Disable two-factor"), "the enabled account has no disable form"
+
+    session.delete("/account/two_factor", user: { current_password: "not the password" })
+    assert session.last_response.status == 422,
+           "a wrong password answered #{session.last_response.status}"
+    body = session.last_response.body
+    assert body.match?(/current password/i) && body.match?(/invalid|incorrect/i),
+           "no current-password error on the page: #{body[0, 800]}"
+
+    user.reload
+    assert user.otp_required_for_login?, "a wrong password turned MFA off"
+    assert user.otp_secret == enabled_key, "a wrong password discarded the key"
+
+    session.delete("/account/two_factor", user: { current_password: PASSWORD })
+    assert session.last_response.status == 302,
+           "the right password answered #{session.last_response.status}"
+    session.follow_redirect!
+    body = session.last_response.body
+
+    assert body.match?(/two-factor authentication is off/i),
+           "no confirmation that MFA is off: #{body[0, 600]}"
+    assert element_text(body, "account-mfa-status").start_with?("Off"),
+           "the MFA status reads #{element_text(body, 'account-mfa-status').inspect}"
+    assert body.include?("Set up two-factor"), "the MFA-off account has no setup action"
+
+    user.reload
+    assert !user.otp_required_for_login?, "the account still requires MFA"
+    assert user.otp_secret.blank?, "the key survived being disabled"
+  end
+
+  check "one account never sees another account's key or MFA state" do
+    owner = account("mfa-owner@example.com")
+    other = account("mfa-other@example.com")
+    owner_session = signed_in_session(owner)
+    other_session = signed_in_session(other)
+
+    owner_session.post("/account/two_factor")
+    owner_session.follow_redirect!
+    key = displayed_key(owner_session.last_response.body)
+    assert key.present?, "the owner's enrolment printed no key"
+
+    other_session.get("/account")
+    body = other_session.last_response.body
+    assert !body.include?(key), "another account's page printed the owner's key"
+    assert !body.include?("otpauth://"), "another account's page printed the owner's setup URI"
+    assert body.include?("Set up two-factor"), "another account has no setup action of its own"
+
+    guest = new_session
+    guest.get("/account")
+    assert guest.last_response.status == 302,
+           "a guest GET /account answered #{guest.last_response.status}"
+    assert !guest.last_response.body.to_s.include?(key), "a guest was shown a key"
   end
 end
