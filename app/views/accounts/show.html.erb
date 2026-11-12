@@ -1,7 +1,7 @@
 <main class="account" aria-labelledby="account-title">
   <small id="edition">Account</small>
   <h1 id="account-title">Your account</h1>
-  <p class="account-lede">The details this account signs in with, and the two things it may change.</p>
+  <p class="account-lede">The details this account signs in with, and the few things it may change.</p>
 
   <dl class="account-details">
     <div class="account-detail">
@@ -67,6 +67,59 @@
       <%= form.password_field :current_password, autocomplete: "current-password", required: true %>
 
       <%= form.submit "Update password" %>
+    <% end %>
+  </section>
+
+  <section class="account-section" id="two-factor" aria-labelledby="two-factor-title">
+    <h2 id="two-factor-title">Two-factor authentication</h2>
+    <p class="account-mfa-status" id="account-mfa-status">
+      <% if @account.otp_required_for_login? %>
+        On. Signing in asks for your password and a code from your authenticator app.
+      <% else %>
+        Off. Signing in asks for your password only.
+      <% end %>
+    </p>
+
+    <% if @account.otp_required_for_login? %>
+      <%= render "form_errors", errors: (@errors if @failed_form == :two_factor_disable_form) %>
+
+      <%= form_with scope: :user, url: account_two_factor_path, method: :delete, local: true,
+                    html: { class: "account-form" } do |form| %>
+        <%= form.label :current_password, "Current password" %>
+        <%= form.password_field :current_password, autocomplete: "current-password", required: true %>
+        <small>Turning two-factor off needs your password, like the forms above. It also discards the key.</small>
+
+        <%= form.submit "Disable two-factor" %>
+      <% end %>
+    <% elsif @pending_otp_secret %>
+      <p>
+        Add this key to your authenticator app (or paste the URI into it), then enter the
+        six-digit code it shows. Two-factor stays off until a code matches.
+      </p>
+
+      <h3>Key</h3>
+      <code class="mfa-key" id="mfa-secret"><%= @pending_otp_secret %></code>
+
+      <h3>Setup URI</h3>
+      <code class="mfa-key" id="mfa-provisioning-uri"><%= @otp_provisioning_uri %></code>
+
+      <%= render "form_errors", errors: (@errors if @failed_form == :two_factor_form) %>
+
+      <%= form_with scope: :user, url: account_two_factor_path, method: :patch, local: true,
+                    html: { class: "account-form" } do |form| %>
+        <%= form.label :otp_attempt, "Six-digit code from the app" %>
+        <%= form.text_field :otp_attempt, inputmode: "numeric", autocomplete: "one-time-code",
+                            pattern: "[0-9]{6}", maxlength: 6, required: true %>
+
+        <%= form.submit "Turn on two-factor" %>
+      <% end %>
+    <% else %>
+      <p>Once two-factor is on, signing in needs a code from an authenticator app as well as your password.</p>
+
+      <%= form_with url: account_two_factor_path, method: :post, local: true,
+                    html: { class: "account-form" } do |form| %>
+        <%= form.submit "Set up two-factor" %>
+      <% end %>
     <% end %>
   </section>
 </main>

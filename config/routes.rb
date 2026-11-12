@@ -38,11 +38,15 @@ Rails.application.routes.draw do
   # The dashboard is a signed-in screen now.
   get "/dashboard", to: "dashboard#show"
 
-  # Your own account: one screen, two narrow writes, both gated by the session
-  # the rest of the app already requires.
+  # Your own account: one screen, three narrow writes, all gated by the session
+  # the rest of the app already requires. The two-factor path is one resource
+  # with three verbs: begin enrolment, confirm the code, turn it off.
   get "/account", to: "accounts#show", as: :account
   patch "/account/email", to: "accounts#update_email", as: :account_email
   patch "/account/password", to: "accounts#update_password", as: :account_password
+  post "/account/two_factor", to: "accounts#setup_two_factor", as: :account_two_factor
+  patch "/account/two_factor", to: "accounts#confirm_two_factor"
+  delete "/account/two_factor", to: "accounts#disable_two_factor"
 
   # The data endpoints default to JSON so an expired session answers 401 to a
   # fetch() caller instead of redirecting it into the sign-in page.
