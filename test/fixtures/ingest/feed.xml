@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:atom="http://www.w3.org/2005/Atom" version="2.0">
+  <channel>
+    <title>Fixture Research Feed</title>
+    <link>https://feed.example</link>
+    <description>A recorded RSS 2.0 feed used by the adapter tests.</description>
+    <lastBuildDate>Thu, 12 Nov 2026 09:00:00 GMT</lastBuildDate>
+    <atom:link href="https://feed.example/feed" rel="self" type="application/rss+xml"/>
+    <item>
+      <title>Why &amp; How Teams Ship Research</title>
+      <link>https://feed.example/p/first-post</link>
+      <guid isPermaLink="true">https://feed.example/p/first-post</guid>
+      <pubDate>Thu, 05 Nov 2026 18:40:03 GMT</pubDate>
+      <description><![CDATA[An opening item that carries a guid, an absolute link and a pubDate.]]></description>
+    </item>
+    <item>
+      <title>An Item With No Guid At All</title>
+      <link>https://feed.example/p/no-guid-post</link>
+      <pubDate>Wed, 04 Nov 2026 12:00:00 GMT</pubDate>
+      <description><![CDATA[The same article must resolve to one external id across polls.]]></description>
+    </item>
+    <item>
+      <title>A Root-Relative Link</title>
+      <link>/p/relative-post</link>
+      <guid>fixture-guid-relative</guid>
+      <pubDate>Tue, 03 Nov 2026 08:30:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>A Replayed Guid</title>
+      <link>https://feed.example/p/first-post-copy</link>
+      <guid isPermaLink="true">https://feed.example/p/first-post</guid>
+      <pubDate>Mon, 02 Nov 2026 08:30:00 GMT</pubDate>
+    </item>
+    <item>
+      <link>https://feed.example/p/untitled-post</link>
+      <guid>fixture-guid-untitled</guid>
+      <pubDate>Sun, 01 Nov 2026 08:30:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Filler Article 06</title>
+      <link>https://feed.example/p/filler-06</link>
+      <guid>fixture-guid-06</guid>
+      <pubDate>Sat, 31 Oct 2026 08:30:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Filler Article 07</title>
+      <link>https://feed.example/p/filler-07</link>
+      <guid>fixture-guid-07</guid>
+      <pubDate>Fri, 30 Oct 2026 08:30:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Filler Article 08</title>
+      <link>https://feed.example/p/filler-08</link>
+      <guid>fixture-guid-08</guid>
+      <pubDate>Thu, 29 Oct 2026 08:30:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Filler Article 09</title>
+      <link>https://feed.example/p/filler-09</link>
+      <guid>fixture-guid-09</guid>
+      <pubDate>Wed, 28 Oct 2026 08:30:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Filler Article 10</title>
+      <link>https://feed.example/p/filler-10</link>
+      <guid>fixture-guid-10</guid>
+      <pubDate>Tue, 27 Oct 2026 08:30:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Filler Article 11</title>
+      <link>https://feed.example/p/filler-11</link>
+      <guid>fixture-guid-11</guid>
+      <pubDate>Mon, 26 Oct 2026 08:30:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Filler Article 12</title>
+      <link>https://feed.example/p/filler-12</link>
+      <guid>fixture-guid-12</guid>
+      <pubDate>Sun, 25 Oct 2026 08:30:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Filler Article 13</title>
+      <link>https://feed.example/p/filler-13</link>
+      <guid>fixture-guid-13</guid>
+      <pubDate>Sat, 24 Oct 2026 08:30:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Filler Article 14</title>
+      <link>https://feed.example/p/filler-14</link>
+      <guid>fixture-guid-14</guid>
+      <pubDate>Fri, 23 Oct 2026 08:30:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Filler Article 15</title>
+      <link>https://feed.example/p/filler-15</link>
+      <guid>fixture-guid-15</guid>
+      <pubDate>Thu, 22 Oct 2026 08:30:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Filler Article 16</title>
+      <link>https://feed.example/p/filler-16</link>
+      <guid>fixture-guid-16</guid>
+      <pubDate>Wed, 21 Oct 2026 08:30:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Filler Article 17</title>
+      <link>https://feed.example/p/filler-17</link>
+      <guid>fixture-guid-17</guid>
+      <pubDate>Tue, 20 Oct 2026 08:30:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Filler Article 18</title>
+      <link>https://feed.example/p/filler-18</link>
+      <guid>fixture-guid-18</guid>
+      <pubDate>Mon, 19 Oct 2026 08:30:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Filler Article 19</title>
+      <link>https://feed.example/p/filler-19</link>
+      <guid>fixture-guid-19</guid>
+      <pubDate>Sun, 18 Oct 2026 08:30:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Filler Article 20</title>
+      <link>https://feed.example/p/filler-20</link>
+      <guid>fixture-guid-20</guid>
+      <pubDate>Sat, 17 Oct 2026 08:30:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Filler Article 21</title>
+      <link>https://feed.example/p/filler-21</link>
+      <guid>fixture-guid-21</guid>
+      <pubDate>Fri, 16 Oct 2026 08:30:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Filler Article 22</title>
+      <link>https://feed.example/p/filler-22</link>
+      <guid>fixture-guid-22</guid>
+      <pubDate>Thu, 15 Oct 2026 08:30:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Filler Article 23</title>
+      <link>https://feed.example/p/filler-23</link>
+      <guid>fixture-guid-23</guid>
+      <pubDate>Wed, 14 Oct 2026 08:30:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Filler Article 24</title>
+      <link>https://feed.example/p/filler-24</link>
+      <guid>fixture-guid-24</guid>
+      <pubDate>Tue, 13 Oct 2026 08:30:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Filler Article 25</title>
+      <link>https://feed.example/p/filler-25</link>
+      <guid>fixture-guid-25</guid>
+      <pubDate>Mon, 12 Oct 2026 08:30:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Filler Article 26</title>
+      <link>https://feed.example/p/filler-26</link>
+      <guid>fixture-guid-26</guid>
+      <pubDate>Sun, 11 Oct 2026 08:30:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Filler Article 27</title>
+      <link>https://feed.example/p/filler-27</link>
+      <guid>fixture-guid-27</guid>
+      <pubDate>Sat, 10 Oct 2026 08:30:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Filler Article 28</title>
+      <link>https://feed.example/p/filler-28</link>
+      <guid>fixture-guid-28</guid>
+      <pubDate>Fri, 09 Oct 2026 08:30:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Filler Article 29</title>
+      <link>https://feed.example/p/filler-29</link>
+      <guid>fixture-guid-29</guid>
+      <pubDate>Thu, 08 Oct 2026 08:30:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Filler Article 30</title>
+      <link>https://feed.example/p/filler-30</link>
+      <guid>fixture-guid-30</guid>
+      <pubDate>Wed, 07 Oct 2026 08:30:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>

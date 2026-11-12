@@ -10,6 +10,7 @@ require_relative "import_records"
 require_relative "ingest_batch"
 require_relative "lobsters_client"
 require_relative "retry_store"
+require_relative "rss_client"
 require_relative "safe_fetcher"
 require_relative "source_gate"
 require_relative "source_registry"
@@ -155,11 +156,11 @@ class IngestionRunner
   end
 
   def adapter_for(source)
-    return nil unless source.api?
-
-    if hacker_news_api?(source.url)
+    if source.rss?
+      RssClient.new(name: source.name, feed_url: source.url, http: @http)
+    elsif source.api? && hacker_news_api?(source.url)
       HackerNewsClient.new(name: source.name, http: @http, api: source.url.to_s.chomp("/"))
-    elsif lobsters_api?(source.url)
+    elsif source.api? && lobsters_api?(source.url)
       LobstersClient.new(name: source.name, http: @http, feed_url: source.url.to_s)
     end
   end

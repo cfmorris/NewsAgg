@@ -48,3 +48,17 @@ sources:
     domains: []
     exclude_domains: []
     owner: null
+  # The first RSS-shaped source: Substack serves RSS 2.0 at /feed and the items
+  # are long-form research the summarizer will need to chunk. The domain rule
+  # keeps the gate to the publication's own host, so a hijacked feed cannot
+  # attribute links elsewhere to it.
+  - id: software-analyst
+    name: The Software Analyst
+    kind: rss
+    url: https://softwareanalyst.substack.com/feed
+    enabled: true
+    max_items: 25
+    min_words: 0
+    domains: ["softwareanalyst.substack.com"]
+    exclude_domains: []
+    owner: null

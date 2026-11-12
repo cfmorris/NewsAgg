@@ -113,6 +113,17 @@ class FakeHttp
     @items[match[1]]
   end
 
+  # The committed allowlist now carries an RSS source, so the runner polls it
+  # through this stub too. An item-less feed keeps the Hacker News paths the only
+  # thing under test here.
+  def get_text(url, accept: nil, timeout: nil)
+    unless url == "https://softwareanalyst.substack.com/feed"
+      raise HttpClient::Error, "Unexpected feed GET #{url}"
+    end
+
+    %(<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>Empty</title></channel></rss>)
+  end
+
   def post_json(url, headers:, body:, timeout:)
     @model_calls += 1
     raise "Unexpected summary URL: #{url}" unless url == "https://llm.example/api/chat/completions"

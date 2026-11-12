@@ -110,6 +110,9 @@ jobs:
       - name: Source gate integration test
         shell: pwsh
         run: bundle exec ruby test/integration/source_gate_test.rb
+      - name: RSS adapter integration test
+        shell: pwsh
+        run: bundle exec ruby test/integration/rss_adapter_test.rb
       - name: Source allowlist acceptance test
         shell: pwsh
         run: bundle exec ruby test/acceptance/source_allowlist_acceptance_test.rb
