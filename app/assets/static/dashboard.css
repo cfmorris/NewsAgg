@@ -375,6 +375,10 @@ aside.filter-panel {
 
 .date-block { margin-top: 1.1rem }
 
+.sort-block { margin-top: 1.1rem }
+.sort-block nav { display: grid; gap: .12rem }
+.bar.sort-option { font-size: .85rem }
+
 .clear-filters { margin: .9rem 0 0 }
 
 /* Article cards ---------------------------------------------------------- */

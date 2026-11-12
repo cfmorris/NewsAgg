@@ -21,6 +21,12 @@ class DashboardFilter
 
   FIELDS = %w[publisher source depth].freeze
 
+  # The orderings the sidebar offers. "newest" is the archive's own order; a
+  # quality sort puts the highest score first and leaves unscored (legacy)
+  # articles at the end instead of hiding them behind a null.
+  SORTS = { "newest" => "Newest first", "quality" => "Highest quality" }.freeze
+  DEFAULT_SORT = "newest"
+
   attr_reader :selected_topic, :selected_heading
 
   def initialize(articles, params, now: -> { Time.now.utc })
@@ -42,13 +48,22 @@ class DashboardFilter
   end
 
   def visible
-    matching.select do |article|
-      if !selected_topic.empty?
-        Array(article["topics"]).include?(selected_topic)
-      else
-        selected_heading.empty? || matches_heading?(article, selected_heading)
+    @visible ||= begin
+      rows = matching.select do |article|
+        if !selected_topic.empty?
+          Array(article["topics"]).include?(selected_topic)
+        else
+          selected_heading.empty? || matches_heading?(article, selected_heading)
+        end
       end
+      sort == "quality" ? by_quality(rows) : rows
     end
+  end
+
+  # The active ordering's key, from a closed set so a stale or hostile ?sort=
+  # value falls back to the archive's own order.
+  def sort
+    @sort ||= SORTS.key?(params_value(:sort)) ? params_value(:sort) : DEFAULT_SORT
   end
 
   def count_text
@@ -138,6 +153,23 @@ class DashboardFilter
   end
 
   private
+
+  # Highest score first, ties kept in the archive's own (newest-first) order and
+  # unscored articles last. The index is carried through the sort because Ruby's
+  # sort_by is not stable, and a reader should not see ties shuffle between
+  # pages.
+  def by_quality(rows)
+    rows.each_with_index.sort_by do |article, index|
+      score = quality_value(article)
+      [score.nil? ? 1 : 0, score.nil? ? 0 : -score, index]
+    end.map(&:first)
+  end
+
+  def quality_value(article)
+    Integer(article["quality_score"])
+  rescue ArgumentError, TypeError
+    nil
+  end
 
   def matches_search?(article)
     terms = @params[:q].to_s.strip.downcase.split(/\s+/).reject(&:empty?)

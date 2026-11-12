@@ -2,6 +2,7 @@ require "date"
 require "uri"
 
 require_relative "archive"
+require_relative "quality_score"
 require_relative "source_materializer"
 
 # Validates importer-contract records and writes them to the Neo4j archive.
@@ -21,6 +22,8 @@ class ImportRecords
       validate!(record, index)
     end
 
+    normalized = records.map { |record| with_quality(record) }
+
     @archive.prepare
     materialize_sources
     @archive.seed_taxonomy
@@ -29,15 +32,27 @@ class ImportRecords
       raise ArgumentError, "Invalid FAST mapping"
     end
     @archive.map_fast_subjects(mappings) unless mappings.empty?
-    records.each_slice(100) { |batch| @archive.import(batch) }
+    normalized.each_slice(100) { |batch| @archive.import(batch) }
     # Per-source cost is derived from the articles, so it is recomputed (not
     # incremented) once the batch is written. A replay recomputes the same
     # total, which is what keeps repeated imports from double-counting.
     @archive.recompute_source_costs
-    records.length
+    normalized.length
   end
 
   private
+
+  # The article contract carries a 1-100 quality score plus the status that says
+  # where it came from. Normalizing here means no record - including one
+  # replayed from an older retry file - can write a missing or off-scale score,
+  # and none of them can abort an import over it.
+  def with_quality(record)
+    quality = QualityScore.normalize(record["quality_score"])
+    status = record["quality_status"].to_s
+    status = quality.status unless QualityScore::STATUSES.include?(status)
+
+    record.merge("quality_score" => quality.value, "quality_status" => status)
+  end
 
   # The allowlist is materialised on every import, before any article is
   # written, so each contributing source always has exactly one node.

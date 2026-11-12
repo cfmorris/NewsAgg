@@ -15,6 +15,21 @@ module DashboardHelper
     denominator.zero? ? 0 : (100.0 * total / denominator).round(2)
   end
 
+  # The article's 1-100 quality score as a card label, or nil for an article
+  # written before scores existed. A clamped or defaulted score says so, so a
+  # substituted number never reads as the model's own judgement.
+  def quality_label(article)
+    score = article["quality_score"]
+    return nil if score.nil? || score.to_s.empty?
+
+    label = "Quality #{score.to_i}"
+    case article["quality_status"].to_s
+    when "clamped" then "#{label} (clamped)"
+    when "default" then "#{label} (default)"
+    else label
+    end
+  end
+
   def auto_pull_enabled?
     AutoPull.enabled?
   end

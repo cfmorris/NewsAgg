@@ -40,6 +40,8 @@ class Archive
       MERGE (article:NewsArticle {url: row.url})
       ON CREATE SET article.title = row.title, article.summary = row.summary,
                     article.depth = row.depth, article.added_at = datetime(),
+                    article.quality_score = row.quality_score,
+                    article.quality_status = row.quality_status,
                     article.summary_cost_usd = row.summary_cost_usd,
                     article.summary_input_tokens = row.summary_input_tokens,
                     article.summary_output_tokens = row.summary_output_tokens,
@@ -64,6 +66,8 @@ class Archive
       RETURN article.title AS title, article.url AS url, article.summary AS summary,
              article.depth AS depth, toString(article.added_at) AS added_at,
              article.published_date AS published_date,
+             article.quality_score AS quality_score,
+             article.quality_status AS quality_status,
              article.summary_cost_usd AS summary_cost_usd,
              article.summary_input_tokens AS summary_input_tokens,
              article.summary_output_tokens AS summary_output_tokens,
