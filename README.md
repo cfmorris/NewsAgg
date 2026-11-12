@@ -169,6 +169,7 @@ database:
 bundle exec ruby test/integration/sign_in_gate_test.rb
 bundle exec ruby test/integration/top_bar_test.rb
 bundle exec ruby test/integration/auth_overlay_test.rb
+bundle exec ruby test/integration/two_factor_sign_in_test.rb
 bundle exec ruby test/integration/asset_charset_test.rb
 bundle exec ruby test/integration/dashboard_test.rb
 bundle exec ruby test/integration/dashboard_pagination_test.rb
@@ -189,7 +190,11 @@ and the Devise sign-in form still submitting through the layout. The auth
 overlay test covers the landing page's floating sign-in: both triggers keep an
 href fallback, the embedded render inside the frame drops the top bar for a
 compact card carrying the same form, and a wrong password re-renders its error
-in the frame. The asset
+in the frame. The two-factor test covers sign-in for an account with MFA on:
+the password step asks for the six-digit code instead of signing in, a valid
+code finishes the sign-in, a wrong one fails in place without charging a
+failed attempt or locking the account, and an account with MFA off still signs
+in with one POST. The asset
 charset test checks that `/dashboard.css`, `/dashboard.js` and `/turbo.js`
 declare UTF-8 and that the stylesheet's glyphs still reach the client as the
 same UTF-8 bytes.

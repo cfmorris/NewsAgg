@@ -1,0 +1,33 @@
+<h2>Verify it's you</h2>
+
+<p><small>Enter the six-digit code from your authenticator app to finish signing in.</small></p>
+
+<%# Same error block the Devise forms render, so the embedded card styles it
+    without anything new. %>
+<% if @error.present? %>
+  <div id="error_explanation" data-turbo-cache="false">
+    <h2>That code did not work</h2>
+    <ul>
+      <li><%= @error %></li>
+    </ul>
+  </div>
+<% end %>
+
+<%# Step two posts to its own route, carrying the overlay marker so the answer
+    re-renders chrome-free inside the landing page's frame. Turbo is off there
+    for the same reason as the password step: the failure stays in the frame. %>
+<%= form_tag user_two_factor_path, method: :post,
+      data: (embedded_auth? ? { turbo: "false" } : {}) do %>
+  <%= hidden_field_tag :embedded, "1" if embedded_auth? %>
+  <div class="field">
+    <%= label_tag "user[otp_attempt]", "Authentication code" %><br />
+    <%= text_field_tag "user[otp_attempt]", nil, autofocus: true, autocomplete: "one-time-code",
+          inputmode: "numeric", pattern: "[0-9]*", maxlength: 6, required: true %>
+  </div>
+
+  <div class="actions">
+    <%= submit_tag "Verify" %>
+  </div>
+<% end %>
+
+<p><%= link_to "Back to sign in", new_user_session_path(auth_path_options) %></p>
