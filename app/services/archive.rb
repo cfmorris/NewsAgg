@@ -12,7 +12,7 @@ class Archive
     "CREATE CONSTRAINT news_publisher_name IF NOT EXISTS FOR (n:NewsPublisher) REQUIRE n.name IS UNIQUE",
     "CREATE CONSTRAINT news_topic_name IF NOT EXISTS FOR (n:NewsTopic) REQUIRE n.name IS UNIQUE",
     "CREATE CONSTRAINT news_discovery_id IF NOT EXISTS FOR (n:NewsDiscovery) REQUIRE (n.source, n.external_id) IS UNIQUE",
-    "CREATE CONSTRAINT news_source_name IF NOT EXISTS FOR (n:NewsSource) REQUIRE n.name IS UNIQUE"
+    "CREATE CONSTRAINT news_source_id IF NOT EXISTS FOR (n:NewsSource) REQUIRE n.id IS UNIQUE"
   ].freeze
 
   def prepare
@@ -87,9 +87,9 @@ class Archive
     end
   end
 
-  # Upserts one NewsSource node per allowlist entry, keyed by name.
+  # Upserts one NewsSource node per allowlist entry, keyed by its stable id.
   #
-  # Idempotent: MERGE on the name (backed by the news_source_name constraint)
+  # Idempotent: MERGE on the id (backed by the news_source_id constraint)
   # means a repeated sync updates the same nodes instead of adding new ones.
   # Config-owned fields are set on every sync, so enabling or disabling a source
   # in config is reflected on the node. The accumulated fields - article_count,
@@ -100,12 +100,13 @@ class Archive
 
     query(<<~CYPHER, { sources: sources }).first.fetch("sources")
       UNWIND $sources AS row
-      MERGE (source:NewsSource {name: row.name})
+      MERGE (source:NewsSource {id: row.id})
       ON CREATE SET source.article_count = 0,
                     source.cost_usd = 0.0,
                     source.quality_score = coalesce(row.quality_score, 0.0),
                     source.created_at = datetime()
-      SET source.kind = row.kind,
+      SET source.name = row.name,
+          source.kind = row.kind,
           source.url = row.url,
           source.enabled = row.enabled,
           source.override = row.override,
@@ -127,7 +128,8 @@ class Archive
   def source_nodes
     query(<<~CYPHER)
       MATCH (source:NewsSource)
-      RETURN source.name AS name, source.kind AS kind, source.url AS url,
+      RETURN source.id AS id, source.name AS name, source.kind AS kind,
+             source.url AS url,
              source.enabled AS enabled, source.owner AS owner,
              source.quality_score AS quality_score,
              source.article_count AS article_count, source.cost_usd AS cost_usd,
@@ -135,7 +137,7 @@ class Archive
              source.max_items AS max_items, source.min_words AS min_words,
              source.domains AS domains, source.exclude_domains AS exclude_domains,
              toString(source.synced_at) AS synced_at
-      ORDER BY source.name
+      ORDER BY source.id
     CYPHER
   end
 

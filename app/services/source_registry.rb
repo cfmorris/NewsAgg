@@ -23,16 +23,18 @@ class SourceRegistry
   DEFAULT_MIN_WORDS = 0
   TOP_LEVEL_KEYS = %w[sources].freeze
   ENTRY_KEYS = %w[
-    name kind url enabled max_items min_words domains exclude_domains owner
+    id name kind url enabled max_items min_words domains exclude_domains owner
   ].freeze
+  ID_PATTERN = /\A[a-z0-9]+(-[a-z0-9]+)*\z/
   DEFAULT_PATH = File.expand_path("../../config/sources.yml", __dir__)
 
   # One validated allowlist entry.
   class Source
-    attr_reader :name, :kind, :url, :max_items, :min_words, :domains, :exclude_domains, :owner
+    attr_reader :id, :name, :kind, :url, :max_items, :min_words, :domains, :exclude_domains, :owner
 
-    def initialize(name:, kind:, url:, enabled:, max_items:, min_words:,
+    def initialize(id:, name:, kind:, url:, enabled:, max_items:, min_words:,
       domains: [], exclude_domains: [], owner: nil)
+      @id = id
       @name = name
       @kind = kind
       @url = url
@@ -43,6 +45,13 @@ class SourceRegistry
       @exclude_domains = Array(exclude_domains).freeze
       @owner = owner
       freeze
+    end
+
+    # The stable identifier used wherever a source is referenced (Neo4j node
+    # identity, reporting keys). It is a slug, optionally declared explicitly,
+    # so renaming the display `name` does not change what the source is.
+    def slug
+      id
     end
 
     def enabled?
@@ -71,6 +80,7 @@ class SourceRegistry
 
     def to_h
       {
+        "id" => id,
         "name" => name, "kind" => kind, "url" => url, "enabled" => enabled?,
         "max_items" => max_items, "min_words" => min_words,
         "domains" => domains.dup, "exclude_domains" => exclude_domains.dup,
@@ -79,7 +89,14 @@ class SourceRegistry
     end
 
     def inspect
-      "#<SourceRegistry::Source #{name.inspect} kind=#{kind.inspect} enabled=#{enabled?}>"
+      "#<SourceRegistry::Source #{id.inspect} name=#{name.inspect} kind=#{kind.inspect} enabled=#{enabled?}>"
+    end
+
+    # "Hacker News" -> "hacker-news". Returns nil when nothing identifier-shaped
+    # survives, which is the loader's cue to demand an explicit id.
+    def self.slug(text)
+      value = text.to_s.downcase.gsub(/[^a-z0-9]+/, "-").gsub(/\A-+|-+\z/, "")
+      value.empty? ? nil : value
     end
 
     def self.normalize_host(host)
@@ -164,7 +181,8 @@ class SourceRegistry
   def find(name)
     wanted = name.to_s.strip
     entries.find { |entry| entry.name == wanted } ||
-      entries.find { |entry| entry.name.downcase == wanted.downcase }
+      entries.find { |entry| entry.name.downcase == wanted.downcase } ||
+      entries.find { |entry| entry.id == wanted }
   end
 
   def fetch(name)
@@ -232,12 +250,13 @@ class SourceRegistry
       raise ConfigError, "#{@path}: `sources:` must be a list" unless list.is_a?(Array)
 
       seen = {}
+      ids = {}
       list.each_with_index.map do |entry, index|
-        source_from(entry, index, seen)
+        source_from(entry, index, seen, ids)
       end
     end
 
-    def source_from(entry, index, seen)
+    def source_from(entry, index, seen, ids)
       fail_at(index, "expected a mapping of source keys") unless entry.is_a?(Hash)
       unknown = entry.keys.map(&:to_s) - ENTRY_KEYS
       unless unknown.empty?
@@ -251,6 +270,7 @@ class SourceRegistry
       seen[name.downcase] = index
 
       Source.new(
+        id: validated_id(entry, index, name, ids),
         name: name,
         kind: validated_kind(entry, index),
         url: validated_url(entry, index),
@@ -261,6 +281,39 @@ class SourceRegistry
         exclude_domains: validated_domains(entry, index, "exclude_domains"),
         owner: validated_owner(entry, index)
       )
+    end
+
+    # The node identity: an explicit `id` when given, otherwise the slugified
+    # name. Either way it must be slug-shaped and unique across the allowlist,
+    # because two sources sharing an id would share (and overwrite) one node.
+    def validated_id(entry, index, name, ids)
+      explicit = entry["id"]
+      if explicit.nil?
+        derived = Source.slug(name)
+        unless derived
+          fail_at(index, "cannot derive an id from name #{name.inspect}; " \
+            "set an explicit id (lowercase letters, digits and hyphens)")
+        end
+
+        return register_id(derived, index, ids)
+      end
+
+      unless explicit.is_a?(String) && explicit.match?(ID_PATTERN)
+        fail_at(index, "id must be lowercase letters, digits and single hyphens " \
+          "(got #{describe(explicit)})")
+      end
+
+      register_id(explicit, index, ids)
+    end
+
+    def register_id(value, index, ids)
+      if ids.key?(value)
+        fail_at(index, "duplicate source id #{value.inspect} (also defined at sources[#{ids[value]}]); " \
+          "ids must be unique")
+      end
+
+      ids[value] = index
+      value
     end
 
     def validated_name(entry, index)

@@ -10,8 +10,9 @@ require_relative "../../app/services/source_materializer"
 require_relative "../../app/services/source_registry"
 
 # Proves that the validated allowlist is materialised as exactly one NewsSource
-# node per entry, that re-importing is idempotent, that a disabled entry lands
-# with enabled=false, and that accumulated counts and costs survive a re-sync.
+# node per entry, identified by the entry id, that re-importing is idempotent,
+# that a disabled entry lands with enabled=false, and that accumulated counts
+# and costs survive a re-sync.
 #
 # Runs against a disposable Neo4j instance only; the guards below refuse to
 # touch anything else.
@@ -56,30 +57,35 @@ def write_config(directory, body)
   path
 end
 
-run = SecureRandom.hex(4)
-alpha = "Alpha Feed #{run}"
-beta = "Beta Feed #{run}"
-gamma = "Gamma Wire #{run}"
-
 def registry_from(directory, body)
   SourceRegistry.load(path: write_config(directory, body))
 end
 
-def nodes_named(archive, names)
-  archive.source_nodes.select { |node| names.include?(node["name"]) }
+def nodes_for(archive, ids)
+  archive.source_nodes.select { |node| ids.include?(node["id"]) }
 end
+
+run = SecureRandom.hex(4)
+alpha_id = "alpha-#{run}"
+beta_id = "beta-feed-#{run}"
+gamma_id = "gamma-#{run}"
+alpha = "Alpha Feed #{run}"
+beta = "Beta Feed #{run}"
+gamma = "Gamma Wire #{run}"
 
 archive = Archive.new
 
 Dir.mktmpdir("newsagg-sources-") do |directory|
   alpha_entry = <<~YAML
-    - name: #{alpha}
+    - id: #{alpha_id}
+      name: #{alpha}
       kind: rss
       url: https://alpha.example.test/feed.xml
       max_items: 5
       domains: ["*.example.test"]
       owner: team-alpha
   YAML
+  # No explicit id: the loader derives the slug from the name.
   beta_entry = <<~YAML
     - name: #{beta}
       kind: api
@@ -87,30 +93,40 @@ Dir.mktmpdir("newsagg-sources-") do |directory|
       enabled: false
   YAML
   gamma_entry = <<~YAML
-    - name: #{gamma}
+    - id: #{gamma_id}
+      name: #{gamma}
       kind: api
       url: https://gamma.example.test/v0
   YAML
 
-  names = [alpha, beta, gamma]
+  ids = [alpha_id, beta_id, gamma_id]
   registry = registry_from(directory, alpha_entry + beta_entry + gamma_entry)
 
   # The import path prepares constraints before writing; do the same here so the
-  # unique name index backs the merge.
+  # unique id index backs the merge.
   archive.prepare
 
-  check "the registry materialises one node per entry" do
+  check "the registry materialises one node per entry, keyed by the stable id" do
     materialised = SourceMaterializer.new(registry: registry, archive: archive).call
     assert(materialised == 3, "expected 3 entries materialised, got #{materialised}")
-    nodes = nodes_named(archive, names)
-    assert(nodes.length == 3, "expected 3 NewsSource nodes, got #{nodes.map { |n| n["name"] }.inspect}")
-    assert(nodes.map { |node| node["name"] }.sort == names.sort,
-      "node names #{nodes.map { |node| node["name"] }.inspect} did not round-trip #{names.inspect}")
+    nodes = nodes_for(archive, ids)
+    assert(nodes.length == 3, "expected 3 NewsSource nodes, got #{nodes.map { |n| n["id"] }.inspect}")
+    assert(nodes.map { |node| node["id"] }.sort == ids.sort,
+      "node ids #{nodes.map { |node| node["id"] }.inspect} did not round-trip #{ids.inspect}")
+    assert(nodes.map { |node| node["name"] }.sort == [alpha, beta, gamma].sort,
+      "node names were #{nodes.map { |node| node["name"] }.inspect}")
+  end
+
+  check "an entry without an explicit id falls back to the slugified name" do
+    node = nodes_for(archive, [beta_id]).first
+    assert(node, "no node for derived id #{beta_id.inspect}")
+    assert(node["id"] == beta_id, "derived id was #{node["id"].inspect}")
+    assert(node["name"] == beta, "display name was #{node["name"].inspect}")
   end
 
   check "a node carries the config identity and policy fields" do
-    node = nodes_named(archive, [alpha]).first
-    assert(node, "no node for #{alpha.inspect}")
+    node = nodes_for(archive, [alpha_id]).first
+    assert(node, "no node for #{alpha_id.inspect}")
     assert(node["kind"] == "rss", "kind was #{node["kind"].inspect}")
     assert(node["url"] == "https://alpha.example.test/feed.xml", "url was #{node["url"].inspect}")
     assert(node["enabled"] == true, "enabled was #{node["enabled"].inspect}")
@@ -120,16 +136,16 @@ Dir.mktmpdir("newsagg-sources-") do |directory|
   end
 
   check "a node carries quality_score, article_count and cost_usd from creation" do
-    node = nodes_named(archive, [gamma]).first
-    assert(node, "no node for #{gamma.inspect}")
+    node = nodes_for(archive, [gamma_id]).first
+    assert(node, "no node for #{gamma_id.inspect}")
     assert(node["quality_score"] == 0.0, "quality_score was #{node["quality_score"].inspect}")
     assert(node["article_count"] == 0, "article_count was #{node["article_count"].inspect}")
     assert(node["cost_usd"] == 0.0, "cost_usd was #{node["cost_usd"].inspect}")
   end
 
   check "override flags report entries that depart from the defaults" do
-    overridden = nodes_named(archive, [alpha]).first
-    plain = nodes_named(archive, [gamma]).first
+    overridden = nodes_for(archive, [alpha_id]).first
+    plain = nodes_for(archive, [gamma_id]).first
     assert(overridden["override"] == true, "alpha override was #{overridden["override"].inspect}")
     assert(overridden["override_keys"].sort == %w[domains max_items owner],
       "alpha override_keys were #{overridden["override_keys"].inspect}")
@@ -140,8 +156,8 @@ Dir.mktmpdir("newsagg-sources-") do |directory|
   end
 
   check "a disabled entry is stored with enabled=false" do
-    node = nodes_named(archive, [beta]).first
-    assert(node, "no node for #{beta.inspect}")
+    node = nodes_for(archive, [beta_id]).first
+    assert(node, "no node for #{beta_id.inspect}")
     assert(node["enabled"] == false, "enabled was #{node["enabled"].inspect}")
     assert(node["override_keys"].include?("enabled"),
       "disabling should be reported as an override, keys were #{node["override_keys"].inspect}")
@@ -149,33 +165,50 @@ Dir.mktmpdir("newsagg-sources-") do |directory|
 
   check "importing twice stays idempotent" do
     2.times { SourceMaterializer.new(registry: registry, archive: archive).call }
-    nodes = nodes_named(archive, names)
+    nodes = nodes_for(archive, ids)
     assert(nodes.length == 3, "expected 3 nodes after re-imports, got #{nodes.length}")
-    counts = nodes.group_by { |node| node["name"] }.transform_values(&:length)
-    counts.each do |name, count|
-      assert(count == 1, "#{name.inspect} has #{count} nodes")
+    counts = nodes.group_by { |node| node["id"] }.transform_values(&:length)
+    counts.each do |id, count|
+      assert(count == 1, "#{id.inspect} has #{count} nodes")
     end
   end
 
-  check "the name constraint backing the merge exists" do
+  check "the id constraint backing the merge exists" do
     found = archive.query(<<~CYPHER)
       SHOW CONSTRAINTS
       YIELD name, labelsOrTypes
-      WHERE name = 'news_source_name'
+      WHERE name = 'news_source_id'
       RETURN collect(name) AS names
     CYPHER
-    assert(found.first["names"] == ["news_source_name"],
-      "expected the news_source_name constraint, got #{found.first["names"].inspect}")
+    assert(found.first["names"] == ["news_source_id"],
+      "expected the news_source_id constraint, got #{found.first["names"].inspect}")
+  end
+
+  check "renaming the display name keeps the same node" do
+    renamed = <<~YAML
+      - id: #{gamma_id}
+        name: #{gamma} (renamed)
+        kind: api
+        url: https://gamma.example.test/v0
+    YAML
+    SourceMaterializer.new(registry: registry_from(directory, renamed), archive: archive).call
+
+    node = nodes_for(archive, [gamma_id]).first
+    assert(node, "the node disappeared when the name changed")
+    assert(node["name"] == "#{gamma} (renamed)", "display name was #{node["name"].inspect}")
+    assert(nodes_for(archive, ids).count { |entry| entry["id"] == gamma_id } == 1,
+      "the rename produced a second node")
   end
 
   check "a re-import preserves existing article_count, cost_usd and quality_score" do
-    archive.query(<<~CYPHER, { name: alpha, count: 7, cost: 0.42, score: 0.75 })
-      MATCH (source:NewsSource {name: $name})
+    archive.query(<<~CYPHER, { id: alpha_id, count: 7, cost: 0.42, score: 0.75 })
+      MATCH (source:NewsSource {id: $id})
       SET source.article_count = $count, source.cost_usd = $cost, source.quality_score = $score
     CYPHER
 
     disabled_alpha = <<~YAML
-      - name: #{alpha}
+      - id: #{alpha_id}
+        name: #{alpha}
         kind: rss
         url: https://alpha.example.test/feed.xml
         max_items: 5
@@ -186,7 +219,7 @@ Dir.mktmpdir("newsagg-sources-") do |directory|
     reloaded = registry_from(directory, disabled_alpha + beta_entry + gamma_entry)
     SourceMaterializer.new(registry: reloaded, archive: archive).call
 
-    node = nodes_named(archive, [alpha]).first
+    node = nodes_for(archive, [alpha_id]).first
     assert(node["article_count"] == 7, "article_count was reset to #{node["article_count"].inspect}")
     assert(node["cost_usd"] == 0.42, "cost_usd was reset to #{node["cost_usd"].inspect}")
     assert(node["quality_score"] == 0.75, "quality_score was reset to #{node["quality_score"].inspect}")
@@ -211,10 +244,10 @@ Dir.mktmpdir("newsagg-sources-") do |directory|
       assert(imported == 1, "expected one imported record, got #{imported}")
     end
 
-    nodes = nodes_named(archive, names)
+    nodes = nodes_for(archive, ids)
     assert(nodes.length == 3, "expected 3 nodes after imports, got #{nodes.length}")
-    assert(nodes.count { |node| node["name"] == gamma } == 1, "gamma was duplicated by the import")
-    alpha_node = nodes.find { |node| node["name"] == alpha }
+    assert(nodes.count { |node| node["id"] == gamma_id } == 1, "gamma was duplicated by the import")
+    alpha_node = nodes.find { |node| node["id"] == alpha_id }
     assert(alpha_node["article_count"] == 7, "alpha article_count was reset by the import")
     assert(alpha_node["cost_usd"] == 0.42, "alpha cost_usd was reset by the import")
   end

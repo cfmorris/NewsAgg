@@ -87,6 +87,45 @@ TestReport.run do
       assert(registry.enabled_names == ["Feed A"], "enabled sources were #{registry.enabled_names.inspect}")
       assert(!registry.include?("Hacker News"), "an implicit Hacker News source appeared")
       assert(registry.fetch("Feed A").owner.nil?, "owner should default to null")
+
+    check "each source carries a stable slug id, explicit or derived from its name" do
+      assert(boot_registry.fetch("Hacker News").id == "hacker-news",
+        "the committed source id was #{boot_registry.fetch("Hacker News").id.inspect}")
+      assert(boot_registry.fetch("hacker-news").name == "Hacker News",
+        "looking a source up by id returned #{boot_registry.fetch("hacker-news").name.inspect}")
+
+      path = SourceConfig.write(directory, [
+        SourceConfig.entry(name: "Feed One"),
+        SourceConfig.entry(id: "wire-two", name: "Feed Two", url: "https://two.example/rss")
+      ])
+      registry = SourceRegistry.load(path: path)
+      assert(registry.fetch("Feed One").id == "feed-one",
+        "a derived id was #{registry.fetch("Feed One").id.inspect}")
+      assert(registry.fetch("Feed Two").id == "wire-two",
+        "an explicit id was #{registry.fetch("Feed Two").id.inspect}")
+      assert(registry.to_h["sources"].map { |entry| entry["id"] } == %w[feed-one wire-two],
+        "to_h ids were #{registry.to_h["sources"].map { |entry| entry["id"] }.inspect}")
+    end
+
+    check "a malformed or duplicate source id refuses to load" do
+      message = SourceConfig.failure(SourceConfig.write(directory, [SourceConfig.entry(id: "Not A Slug")]))
+      assert(message&.include?("sources[0]") && message.include?("id must be lowercase"),
+        "unclear refusal: #{message.inspect}")
+
+      duplicate = SourceConfig.failure(SourceConfig.write(directory, [
+        SourceConfig.entry(id: "same-id"),
+        SourceConfig.entry(name: "Other Feed", url: "https://other.example/rss", id: "same-id")
+      ]))
+      assert(duplicate&.include?("sources[1]") && duplicate.include?("duplicate source id"),
+        "unclear refusal: #{duplicate.inspect}")
+
+      derived = SourceConfig.failure(SourceConfig.write(directory, [
+        SourceConfig.entry(name: "A B"),
+        SourceConfig.entry(name: "A-B", url: "https://dash.example/rss")
+      ]))
+      assert(derived&.include?("duplicate source id"),
+        "two names slugging to one id loaded: #{derived.inspect}")
+    end
     end
 
     check "an empty allowlist loads as an empty registry with no implicit default" do

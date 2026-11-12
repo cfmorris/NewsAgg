@@ -4,8 +4,8 @@ require_relative "source_registry"
 # Projects the validated config/sources.yml registry onto Neo4j, so the
 # allowlist is queryable next to the articles each source produced.
 #
-# One NewsSource node per registry entry, keyed by name, written with an
-# idempotent MERGE: importing twice leaves one node per entry and never
+# One NewsSource node per registry entry, identified by its stable id, written
+# with an idempotent MERGE: importing twice leaves one node per entry and never
 # duplicates. Config owns the identity and policy fields (kind, url, enabled,
 # owner, limits, domain rules, override flags); the node owns the accumulated
 # facts (article_count, cost_usd, quality_score), which are seeded once on
@@ -37,6 +37,7 @@ class SourceMaterializer
   def row_for(entry)
     keys = override_keys(entry)
     {
+      "id" => entry.id,
       "name" => entry.name,
       "kind" => entry.kind,
       "url" => entry.url,
