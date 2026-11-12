@@ -80,18 +80,25 @@ class DashboardController < ApplicationController
     head :service_unavailable
   end
 
+  # The three assets live under app/assets/static/ so nothing in public/ can
+  # shadow these actions: ActionDispatch::Static, or any other static mount over
+  # public/, answers from disk with a bare Content-Type and drops the charset the
+  # glyphs in the stylesheet need. The paths are Rails.root-relative so they do
+  # not depend on the process's working directory.
+  ASSET_ROOT = Rails.root.join("app/assets/static")
+
   def turbo
-    send_file Rails.root.join("public/turbo.js"),
+    send_file ASSET_ROOT.join("turbo.js"),
       type: "application/javascript; charset=utf-8", disposition: "inline"
   end
 
   def dashboard_js
-    send_file Rails.root.join("public/dashboard.js"),
+    send_file ASSET_ROOT.join("dashboard.js"),
       type: "application/javascript; charset=utf-8", disposition: "inline"
   end
 
   def dashboard_css
-    send_file Rails.root.join("public/dashboard.css"),
+    send_file ASSET_ROOT.join("dashboard.css"),
       type: "text/css; charset=utf-8", disposition: "inline"
   end
 
