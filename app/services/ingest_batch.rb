@@ -105,6 +105,7 @@ class IngestBatch
           url: final_url, title: title, publisher: publisher, text: extracted[:text]
         )
         @meter&.record(summaries: 1, cost_usd: summary["cost_usd"].to_f)
+        usage = summary["usage"].is_a?(Hash) ? summary["usage"] : {}
         record = valid_record(
           "url" => final_url,
           "title" => title,
@@ -115,7 +116,11 @@ class IngestBatch
           "source" => story["source"] || "Hacker News",
           "external_id" => story["external_id"].to_s,
           "discovery_url" => story["discovery_url"],
-          "published_date" => extracted[:published_date]
+          "published_date" => extracted[:published_date],
+          "summary_cost_usd" => summary["cost_usd"].to_f,
+          "summary_input_tokens" => usage["prompt_tokens"].to_i,
+          "summary_output_tokens" => usage["completion_tokens"].to_i,
+          "summary_cache_read_tokens" => usage["prompt_cache_hit_tokens"].to_i
         )
         raise "Summary did not match the importer contract" unless record
 

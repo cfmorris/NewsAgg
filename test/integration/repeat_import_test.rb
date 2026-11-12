@@ -58,7 +58,11 @@ first_batch = [
     "source" => "Hacker News",
     "external_id" => "7001",
     "discovery_url" => "https://news.ycombinator.com/item?id=7001",
-    "published_date" => published_date
+    "published_date" => published_date,
+    "summary_cost_usd" => 0.000123,
+    "summary_input_tokens" => 1200,
+    "summary_output_tokens" => 300,
+    "summary_cache_read_tokens" => 400
   },
   {
     "url" => article_two,
@@ -82,7 +86,11 @@ repost = {
   "topics" => ["Software Engineering"],
   "source" => "Hacker News",
   "external_id" => "7003",
-  "discovery_url" => "https://news.ycombinator.com/item?id=7003"
+  "discovery_url" => "https://news.ycombinator.com/item?id=7003",
+  "summary_cost_usd" => 0.99,
+  "summary_input_tokens" => 9999,
+  "summary_output_tokens" => 9999,
+  "summary_cache_read_tokens" => 9999
 }.freeze
 
 def snapshot(archive, base)
@@ -155,6 +163,40 @@ check "published and archive dates are reported as distinct fields" do
   assert(Time.iso8601(first["archive_timestamp"]).iso8601 == first["archive_timestamp"],
     "archive_timestamp was #{first["archive_timestamp"].inspect}")
   assert(second["published_date"].nil?, "second article should have no published date")
+end
+
+check "an import records the summary cost, tokens and timestamp" do
+  assert((first["summary_cost_usd"] - 0.000123).abs < 1e-12,
+    "summary_cost_usd was #{first["summary_cost_usd"].inspect}")
+  assert(first["summary_input_tokens"] == 1200, "summary_input_tokens was #{first["summary_input_tokens"].inspect}")
+  assert(first["summary_output_tokens"] == 300, "summary_output_tokens was #{first["summary_output_tokens"].inspect}")
+  assert(first["summary_cache_read_tokens"] == 400, "summary_cache_read_tokens was #{first["summary_cache_read_tokens"].inspect}")
+  assert(!first["summarized_at"].to_s.empty?, "summarized_at was #{first["summarized_at"].inspect}")
+  assert(Time.iso8601(first["summarized_at"]), "summarized_at is not an ISO 8601 timestamp")
+end
+
+check "a replayed import never changes the stored summary cost" do
+  replay = replay_view.find { |article| article["url"] == article_one }
+  assert(replay, "the priced article disappeared on replay")
+  assert(replay["summary_cost_usd"] == first["summary_cost_usd"],
+    "replayed cost changed to #{replay["summary_cost_usd"].inspect}")
+  assert(replay["summary_input_tokens"] == 1200,
+    "replayed input tokens changed to #{replay["summary_input_tokens"].inspect}")
+  assert(replay["summary_output_tokens"] == 300,
+    "replayed output tokens changed to #{replay["summary_output_tokens"].inspect}")
+  assert(replay["summary_cache_read_tokens"] == 400,
+    "replayed cache-read tokens changed to #{replay["summary_cache_read_tokens"].inspect}")
+  assert(replay["summarized_at"] == first["summarized_at"],
+    "replayed summarized_at changed from #{first["summarized_at"]} to #{replay["summarized_at"]}")
+end
+
+check "an article imported without cost fields reads as null, not zero" do
+  assert(second["summary_cost_usd"].nil?,
+    "legacy summary_cost_usd should be null, got #{second["summary_cost_usd"].inspect}")
+  assert(second["summary_input_tokens"].nil?, "legacy summary_input_tokens was #{second["summary_input_tokens"].inspect}")
+  assert(second["summary_output_tokens"].nil?, "legacy summary_output_tokens was #{second["summary_output_tokens"].inspect}")
+  assert(second["summary_cache_read_tokens"].nil?,
+    "legacy summary_cache_read_tokens was #{second["summary_cache_read_tokens"].inspect}")
 end
 
 if $failures.empty?
