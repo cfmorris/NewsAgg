@@ -453,8 +453,9 @@ TestReport.run do
 
     budget = AutoPull::Budget.new(expected_daily_stories: 1, max_usd: 100.0)
     meter = AutoPull::Meter.new(state: fresh_state(clock), budget: budget)
-    batch = IngestBatch.new(hn: hn, fetcher: fetcher, summarizer: summarizer,
-      extractor: extractor, meter: meter)
+    gate = SourceGate.new(registry: SourceRegistry.current)
+    batch = IngestBatch.new(adapters: { "Hacker News" => hn }, gate: gate, fetcher: fetcher,
+      summarizer: summarizer, extractor: extractor, meter: meter)
     result = batch.run(feed: "new", limit: 4, archive_rows: [])
 
     assert(result[:budget_stopped] == true, "the batch did not report a budget stop")
