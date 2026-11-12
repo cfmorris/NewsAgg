@@ -21,19 +21,6 @@ module Users
 
     before_action :redirect_if_signed_in, only: :two_factor
 
-    # A guest who reaches /users/sign_in directly - a bookmark, or the redirect a
-    # protected page hands them - should get what clicking "Sign in" gives: the
-    # landing page with the floating card already open, loading this same screen
-    # with ?embedded=1 inside the frame. Without this, a direct visit rendered a
-    # bare form in the page chrome while every other route into sign-in opened the
-    # card, so the two ways in looked like two different products.
-    # The embedded render and a signed-in visitor fall through to Devise.
-    def new
-      return super if params[:embedded].present? || user_signed_in?
-
-      redirect_to root_path(auth: "sign-in")
-    end
-
     # Step one. An MFA account that got the password right is sent to the code
     # step; everyone else falls through to Devise's own create.
     def create
