@@ -74,6 +74,9 @@ jobs:
       - name: Dashboard pagination integration test
         shell: pwsh
         run: bundle exec ruby test/integration/dashboard_pagination_test.rb
+      - name: Hidden articles integration test
+        shell: pwsh
+        run: bundle exec ruby test/integration/hidden_articles_test.rb
       - name: Infographic integration test
         shell: pwsh
         run: bundle exec ruby test/integration/infographic_test.rb

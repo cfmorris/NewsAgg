@@ -37,6 +37,12 @@ Rails.application.routes.draw do
   # The data endpoints default to JSON so an expired session answers 401 to a
   # fetch() caller instead of redirecting it into the sign-in page.
   get "/articles", to: "dashboard#articles", defaults: { format: :json }
+
+  # Per-account dismissal of an article, keyed by its url. Both verbs land on
+  # the same path: the resource is the reader's hidden set, not an article row.
+  post "/articles/hide", to: "hidden_articles#create", as: :hide_article
+  delete "/articles/hide", to: "hidden_articles#destroy", as: :unhide_article
+
   get "/dashboard/stream", to: "dashboard#stream", defaults: { format: :json }
   get "/infographic", to: "infographic#show"
   get "/auto-pull", to: "dashboard#auto_pull", defaults: { format: :json }
