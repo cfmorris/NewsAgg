@@ -13,6 +13,12 @@ module NewsArchive
   class Application < Rails::Application
     config.load_defaults 8.0
     config.eager_load = Rails.env.production?
+
+    # The three public assets (dashboard.css, dashboard.js, turbo.js) are served
+    # by DashboardController so they are reachable before a session exists. The
+    # static file middleware would otherwise answer those paths first from
+    # public/ and drop the charset, so it must stay out of the way.
+    config.public_file_server.enabled = false
     config.secret_key_base = ENV.fetch("SECRET_KEY_BASE") { SecureRandom.hex(64) }
 
     # Action Mailer points at nothing external by default: development logs the
