@@ -39,6 +39,17 @@ jobs:
             ruby -c $file
             if ($LASTEXITCODE) { exit $LASTEXITCODE }
           }
+      - name: Prepare databases
+        shell: pwsh
+        run: |
+          bundle exec rails db:prepare
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $env:RAILS_ENV = 'test'
+          bundle exec rails db:prepare
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Database integration test
+        shell: pwsh
+        run: bundle exec ruby test/integration/database_test.rb
       - name: Dashboard integration test
         shell: pwsh
         run: bundle exec ruby test/integration/dashboard_test.rb
