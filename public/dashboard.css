@@ -442,6 +442,41 @@ article p { color: var(--text-body); max-width: 72ch; margin: .35rem 0 0; font-s
   color: var(--on-accent);
 }
 
+/* Per-account dismissal -------------------------------------------------- */
+
+/* The Hide / Unhide control sits in the card's corner so a whole article is
+   not reflowed by it. */
+.article-actions { display: flex; justify-content: flex-end; margin-top: .55rem }
+
+.article-action-form { margin: 0 }
+
+.article-action {
+  padding: .12rem .65rem;
+  font-size: .75rem;
+  letter-spacing: .01em;
+  color: var(--text-muted);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color .16s ease, border-color .16s ease, background-color .16s ease;
+}
+
+.article-action:hover {
+  color: var(--text);
+  border-color: var(--border-control);
+  background: var(--surface-hover);
+}
+
+.article-action:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+
+/* A plain topic row: the count is the reader's own hidden set. */
+.bar.hidden-topic { font-size: .9rem }
+
 /* Search, filters and controls ------------------------------------------ */
 
 .quick-filters {

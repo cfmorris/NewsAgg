@@ -1,6 +1,7 @@
 require "digest"
 require "fileutils"
 require "json"
+require "set"
 
 require_relative "../services/archive"
 require_relative "../services/auto_pull"
@@ -49,7 +50,7 @@ class DashboardController < ApplicationController
   end
 
   def articles
-    rows = archive.articles
+    rows = visible_articles
     per_page = Pagination.per_page(params[:per_page])
     page_count = Pagination.page_count(rows.length, per_page)
     page = Pagination.page(params[:page], page_count)
@@ -97,13 +98,38 @@ class DashboardController < ApplicationController
   private
 
   def prepare_dashboard
-    @articles = archive.articles
+    @hidden_view = params[:view].to_s == "hidden"
+    hidden = HiddenArticle.urls_for(current_user).to_set
+    @hidden_count = 0
+
+    all = archive.articles
+    hidden_rows = all.select { |article| hidden.include?(article["url"]) }
+    @hidden_count = hidden_rows.length
+    # The Hidden topic is a view, not a tag: inside it the list is the account's
+    # hidden articles, and every other topic view has them removed first, before
+    # the filter counts or the pages are computed.
+    @articles = @hidden_view ? hidden_rows : all.reject { |article| hidden.include?(article["url"]) }
   rescue Archive::Unavailable
     @articles = []
     @archive_error = "Could not load Neo4j. Check the connection and reload the dashboard."
   ensure
     @filter = DashboardFilter.new(@articles || [], params)
     @version = archive_version(@articles || [])
+  end
+
+  # The archive rows this caller may see. A hidden article is gone by default,
+  # comes back for ?include_hidden=1, and is the whole answer in the Hidden view.
+  def visible_articles
+    rows = archive.articles
+    hidden = HiddenArticle.urls_for(current_user).to_set
+
+    if params[:view].to_s == "hidden"
+      rows.select { |article| hidden.include?(article["url"]) }
+    elsif params[:include_hidden].to_s == "1"
+      rows
+    else
+      rows.reject { |article| hidden.include?(article["url"]) }
+    end
   end
 
   def archive_version(articles)

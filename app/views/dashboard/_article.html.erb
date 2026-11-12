@@ -19,4 +19,19 @@
     <% end %>
   </h3>
   <p><%= article["summary"] %><% if article["url"] %> · <%= link_to "Original", article["url"] %><% end %><% Array(article["discoveries"]).each do |discovery| %> · <%= link_to(discovery["source"] == "Hacker News" ? "HN discussion" : discovery["source"], discovery["url"]) %><% end %></p>
+  <% if article["url"] %>
+    <div class="article-actions">
+      <% if hidden_view %>
+        <%= button_to "Unhide", unhide_article_path, method: :delete,
+          params: { url: article["url"] },
+          class: "article-action", form_class: "article-action-form",
+          form: { "aria-label" => "Unhide #{article["title"]}" } %>
+      <% else %>
+        <%= button_to "Hide", hide_article_path,
+          params: { url: article["url"] },
+          class: "article-action", form_class: "article-action-form",
+          form: { "aria-label" => "Hide #{article["title"]}" } %>
+      <% end %>
+    </div>
+  <% end %>
 </article>

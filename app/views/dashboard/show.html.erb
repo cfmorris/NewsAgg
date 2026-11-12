@@ -29,10 +29,10 @@
             <h2>Topics</h2>
             <nav aria-label="Topics by subject">
             <div id="topics">
-              <%= link_to filter_link(topic: nil, heading: nil, page: nil),
+              <%= link_to filter_link(view: nil, topic: nil, heading: nil, page: nil),
                 class: "bar",
                 data: { turbo_frame: "dashboard" },
-                "aria-pressed" => (@filter.selected_topic.empty? && @filter.selected_heading.empty?).to_s,
+                "aria-pressed" => (@filter.selected_topic.empty? && @filter.selected_heading.empty? && !@hidden_view).to_s,
                 style: "--share: #{share(@filter.all_count)}%" do %>
                 <span>All articles</span><span><%= @filter.all_count %></span>
               <% end %>
@@ -57,6 +57,16 @@
                       <span><%= topic[:name] %></span><span><%= topic[:count] %></span>
                     <% end %>
                   <% end %>
+                <% end %>
+              <% end %>
+              <%# The reader's own dismissed articles. It is not a taxonomy node, so
+                  it sits below the subject tree and only exists while it has rows. %>
+              <% if @hidden_count.positive? %>
+                <%= link_to dashboard_path(view: "hidden"),
+                  class: "bar hidden-topic",
+                  data: { turbo_frame: "dashboard" },
+                  "aria-pressed" => @hidden_view.to_s do %>
+                  <span>Hidden</span><span><%= @hidden_count %></span>
                 <% end %>
               <% end %>
             </div>
@@ -109,17 +119,24 @@
       </aside>
 
       <section class="results" aria-labelledby="count">
-        <h2 id="count" aria-live="polite" tabindex="-1"><%= @filter.count_text %></h2>
+        <h2 id="count" aria-live="polite" tabindex="-1"><%= @hidden_view ? "#{@filter.count_text} · Hidden" : @filter.count_text %></h2>
         <p class="page-indicator" id="page-indicator">Page <%= @filter.page %> of <%= @filter.page_count %></p>
         <div id="articles">
-          <%= render partial: "article", collection: @filter.page_articles, as: :article %>
+          <%= render partial: "article", collection: @filter.page_articles, as: :article,
+            locals: { hidden_view: @hidden_view } %>
           <% if @filter.visible.empty? %>
             <div class="empty-state" role="status">
-              <h3>No articles match these filters.</h3>
-              <p>Try a broader search, a different date range, or another topic.</p>
-              <p><%= link_to "Clear filters", filter_link(topic: nil, heading: nil, q: nil, date_preset: nil,
-                date_from: nil, date_through: nil, published_from: nil, published_through: nil,
-                publisher: nil, source: nil, depth: nil, page: nil), data: { turbo_frame: "dashboard" } %></p>
+              <% if @hidden_view && @hidden_count.zero? %>
+                <h3>Nothing hidden yet.</h3>
+                <p>Select <strong>Hide</strong> on any article card to move it out of your topics and into this list.</p>
+                <p><%= link_to "Back to all articles", dashboard_path, data: { turbo_frame: "dashboard" } %></p>
+              <% else %>
+                <h3>No articles match these filters.</h3>
+                <p>Try a broader search, a different date range, or another topic.</p>
+                <p><%= link_to "Clear filters", filter_link(topic: nil, heading: nil, q: nil, date_preset: nil,
+                  date_from: nil, date_through: nil, published_from: nil, published_through: nil,
+                  publisher: nil, source: nil, depth: nil, page: nil), data: { turbo_frame: "dashboard" } %></p>
+              <% end %>
             </div>
           <% end %>
         </div>
