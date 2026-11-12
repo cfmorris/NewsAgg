@@ -13,6 +13,14 @@ include TestReport
 ARROW_GLYPH_BYTES = "\xE2\x96\xBE".b
 SEPARATOR_GLYPH_BYTES = "\xC2\xB7".b
 
+# Every asset the app serves itself. The `mime` pattern is the Content-Type
+# family without the charset, which is asserted separately.
+ASSET_ROUTES = {
+  "/dashboard.css" => { action: "dashboard_css", mime: %r{\Atext/css\b}, file: "dashboard.css" },
+  "/dashboard.js" => { action: "dashboard_js", mime: %r{\Aapplication/javascript\b}, file: "dashboard.js" },
+  "/turbo.js" => { action: "turbo", mime: %r{\Aapplication/javascript\b}, file: "turbo.js" }
+}.freeze
+
 def binary_body(response)
   response.body.to_s.dup.force_encoding(Encoding::BINARY)
 end
@@ -27,6 +35,10 @@ end
 
 request = Rack::MockRequest.new(Rails.application)
 host = { "HTTP_HOST" => "127.0.0.1:3000" }
+# Rack::MockRequest drives the complete middleware stack, so these requests are
+# answered the way a browser's are: ActionDispatch::Static gets first refusal,
+# then the router, then DashboardController. Calling the controller method
+# directly would skip all of that and prove nothing about the wire.
 
 TestReport.run do
   check "the dashboard stylesheet declares utf-8 in its content type" do
@@ -53,6 +65,72 @@ TestReport.run do
       assert(response["Content-Type"].to_s.match?(%r{\A(?:application|text)/javascript\b}),
         "#{path} no longer serves a JavaScript content type: #{response['Content-Type'].inspect}")
     end
+  end
+
+  # Every asset must come back from DashboardController. The static file
+  # middleware leaves two fingerprints the controller never does: a
+  # Last-Modified header taken from the file's mtime, and no Content-Disposition
+  # (send_file always sets it to "inline").
+  check "every asset is answered by its controller action, not the static middleware" do
+    ASSET_ROUTES.each do |path, asset|
+      response = request.get(path, host)
+      assert(response.ok?, "#{path} answered HTTP #{response.status}")
+      assert(response["Last-Modified"].nil?,
+        "#{path} carries Last-Modified #{response['Last-Modified'].inspect}: the request was answered by " \
+        "ActionDispatch::Static off public/, not by DashboardController##{asset[:action]}")
+      assert(response["Content-Disposition"].to_s.include?("inline"),
+        "#{path} has no inline Content-Disposition, so DashboardController##{asset[:action]} did not send the " \
+        "file (Content-Disposition was #{response['Content-Disposition'].inspect})")
+      assert(response["Content-Type"].to_s.match?(asset[:mime]),
+        "#{path} Content-Type is #{response['Content-Type'].inspect}, expected a #{asset[:mime].source} type")
+    end
+  end
+
+  # Reproduces the arrangement the live app fell into: a static file handler in
+  # front of the app, pointed at public/. While the assets live in public/ the
+  # handler answers them itself, from disk, with a bare text/css or
+  # text/javascript Content-Type and a Last-Modified header -- the browser then
+  # decodes the UTF-8 glyphs as cp1252. Once the files leave public/ the handler
+  # finds nothing, falls through to the router, and the charset survives.
+  check "a static mount over public/ cannot strip the charset from any asset" do
+    shadowing_app = ActionDispatch::Static.new(Rails.application, Rails.root.join("public").to_s)
+    shadowing_request = Rack::MockRequest.new(shadowing_app)
+    ASSET_ROUTES.each do |path, asset|
+      response = shadowing_request.get(path, host)
+      assert(response.ok?, "#{path} answered HTTP #{response.status} behind a static mount over public/")
+      assert(charset_utf8?(response),
+        "#{path} loses its charset when a static mount sits over public/: " \
+        "Content-Type is #{response['Content-Type'].inspect}. The response is coming off disk, not from " \
+        "DashboardController##{asset[:action]}.")
+      assert(response["Last-Modified"].nil?,
+        "#{path} is served by the static handler (Last-Modified #{response['Last-Modified'].inspect}) " \
+        "when public/ is mounted in front of the app")
+    end
+  end
+
+  # "/dashboard.css" and "/dashboard.js" are also valid /dashboard requests with a
+  # format suffix. If the asset routes lose their place ahead of /dashboard, the
+  # dashboard action swallows them and the charset disappears again.
+  check "the asset routes resolve to DashboardController, not to a format-suffixed /dashboard" do
+    ASSET_ROUTES.each do |path, asset|
+      recognised = Rails.application.routes.recognize_path(path, method: :get)
+      assert(recognised[:controller].to_s == "dashboard",
+        "#{path} routes to #{recognised[:controller].inspect}, expected \"dashboard\"")
+      assert(recognised[:action].to_s == asset[:action],
+        "#{path} routes to #{recognised[:controller]}##{recognised[:action]}, expected ##{asset[:action]}")
+    end
+  end
+
+  # The whole point of the fix: nothing the router serves may also sit in
+  # public/. ActionDispatch::Static (or any future static mount pointed at
+  # public/) would win the race and strip the charset again, silently.
+  check "no asset served by a route is also present in public/" do
+    public_dir = Rails.root.join("public")
+    shadowing = ASSET_ROUTES.values.map { |asset| asset[:file] }
+      .select { |file| File.exist?(public_dir.join(file)) }
+    assert(shadowing.empty?,
+      "public/ still contains #{shadowing.join(', ')}; the static handler can shadow the controller actions " \
+      "and drop the charset. Move them under app/.")
   end
 
   check "the landing page loads its stylesheet and scripts" do
