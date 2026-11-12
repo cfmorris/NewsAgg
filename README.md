@@ -1,4 +1,4 @@
-# Technical Reading Room
+# NewsAgg
 
 Rails owns the dashboard: controllers and views render the archive, filter it, and
 compute every article and topic count on the server. Turbo keeps the page current.
