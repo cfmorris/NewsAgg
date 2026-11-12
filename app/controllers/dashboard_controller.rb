@@ -6,6 +6,7 @@ require_relative "../services/archive"
 require_relative "../services/auto_pull"
 require_relative "../services/auto_pull_supervisor"
 require_relative "../services/dashboard_filter"
+require_relative "../services/pagination"
 
 class DashboardController < ApplicationController
   layout "application"
@@ -48,7 +49,16 @@ class DashboardController < ApplicationController
   end
 
   def articles
-    render json: archive.articles
+    rows = archive.articles
+    per_page = Pagination.per_page(params[:per_page])
+    page_count = Pagination.page_count(rows.length, per_page)
+    page = Pagination.page(params[:page], page_count)
+
+    response.headers["X-Total-Count"] = rows.length.to_s
+    response.headers["X-Page-Count"] = page_count.to_s
+    response.headers["X-Page"] = page.to_s
+
+    render json: Pagination.slice(rows, page, per_page)
   rescue Archive::Unavailable
     render json: { error: "The archive is unavailable. Check the Neo4j connection." },
       status: :service_unavailable

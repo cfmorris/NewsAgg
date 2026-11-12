@@ -1,7 +1,13 @@
 require "time"
 
-# Applies the dashboard's search, date, facet and topic filters and counts.
+require_relative "pagination"
+
+# Applies the dashboard's search, date, facet and topic filters, counts, and
+# pages the visible set.
 class DashboardFilter
+  # Articles rendered per dashboard page.
+  PER_PAGE = Pagination::DEFAULT_PER_PAGE
+
   DATE_PRESETS = {
     "3" => 3, "12" => 12, "24" => 24, "72" => 72,
     "168" => 168, "336" => 336, "720" => 720
@@ -54,6 +60,25 @@ class DashboardFilter
 
   def all_count
     matching.length
+  end
+
+  # Articles shown on one dashboard page.
+  def per_page
+    PER_PAGE
+  end
+
+  # Pages spanned by the *visible* (filtered) set, never zero.
+  def page_count
+    Pagination.page_count(visible.length, per_page)
+  end
+
+  # The requested page, clamped to the filtered set's page range.
+  def page
+    @page ||= Pagination.page(params_value(:page), page_count)
+  end
+
+  def page_articles
+    Pagination.slice(visible, page, per_page)
   end
 
   # True when either custom date field is set. The panel opens its "Custom

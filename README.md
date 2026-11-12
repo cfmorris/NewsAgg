@@ -145,6 +145,7 @@ bundle exec ruby test/integration/top_bar_test.rb
 bundle exec ruby test/integration/auth_overlay_test.rb
 bundle exec ruby test/integration/asset_charset_test.rb
 bundle exec ruby test/integration/dashboard_test.rb
+bundle exec ruby test/integration/dashboard_pagination_test.rb
 bundle exec ruby test/integration/infographic_test.rb
 bundle exec ruby test/integration/ingestion_test.rb
 bundle exec ruby test/integration/auto_pull_test.rb

@@ -29,7 +29,7 @@
             <h2>Topics</h2>
             <nav aria-label="Topics by subject">
             <div id="topics">
-              <%= link_to filter_link(topic: nil, heading: nil),
+              <%= link_to filter_link(topic: nil, heading: nil, page: nil),
                 class: "bar",
                 data: { turbo_frame: "dashboard" },
                 "aria-pressed" => (@filter.selected_topic.empty? && @filter.selected_heading.empty?).to_s,
@@ -38,7 +38,7 @@
               <% end %>
 
               <% @filter.topic_tree.each do |group| %>
-                <%= link_to filter_link(heading: group[:selected] ? nil : group[:heading], topic: nil),
+                <%= link_to filter_link(heading: group[:selected] ? nil : group[:heading], topic: nil, page: nil),
                   class: "bar heading-caption",
                   data: { turbo_frame: "dashboard" },
                   "aria-pressed" => group[:selected].to_s,
@@ -49,7 +49,7 @@
                 <% if group[:expanded] %>
                   <% group[:topics].each do |topic| %>
                     <%= link_to filter_link(topic: topic[:selected] ? nil : topic[:name],
-                      heading: topic[:selected] ? nil : group[:heading]),
+                      heading: topic[:selected] ? nil : group[:heading], page: nil),
                       class: "bar topic",
                       data: { turbo_frame: "dashboard" },
                       "aria-pressed" => topic[:selected].to_s,
@@ -103,25 +103,53 @@
             </label>
             <p class="clear-filters"><%= link_to "Clear filters", filter_link(topic: nil, heading: nil, q: nil, date_preset: nil,
               date_from: nil, date_through: nil, published_from: nil, published_through: nil,
-              publisher: nil, source: nil, depth: nil), data: { turbo_frame: "dashboard" } %></p>
+              publisher: nil, source: nil, depth: nil, page: nil), data: { turbo_frame: "dashboard" } %></p>
           </div>
         </details>
       </aside>
 
       <section class="results" aria-labelledby="count">
         <h2 id="count" aria-live="polite" tabindex="-1"><%= @filter.count_text %></h2>
+        <p class="page-indicator" id="page-indicator">Page <%= @filter.page %> of <%= @filter.page_count %></p>
         <div id="articles">
-          <%= render partial: "article", collection: @filter.visible, as: :article %>
+          <%= render partial: "article", collection: @filter.page_articles, as: :article %>
           <% if @filter.visible.empty? %>
             <div class="empty-state" role="status">
               <h3>No articles match these filters.</h3>
               <p>Try a broader search, a different date range, or another topic.</p>
               <p><%= link_to "Clear filters", filter_link(topic: nil, heading: nil, q: nil, date_preset: nil,
                 date_from: nil, date_through: nil, published_from: nil, published_through: nil,
-                publisher: nil, source: nil, depth: nil), data: { turbo_frame: "dashboard" } %></p>
+                publisher: nil, source: nil, depth: nil, page: nil), data: { turbo_frame: "dashboard" } %></p>
             </div>
           <% end %>
         </div>
+
+        <% if @filter.page_count > 1 %>
+          <nav class="pagination" aria-label="Article pages">
+            <% if @filter.page > 1 %>
+              <%= link_to "Previous", filter_link(page: @filter.page - 1), rel: "prev",
+                class: "pagination-link", data: { turbo_frame: "dashboard", turbo_action: "advance" } %>
+            <% else %>
+              <span class="pagination-link is-disabled" aria-disabled="true">Previous</span>
+            <% end %>
+
+            <% (1..@filter.page_count).each do |number| %>
+              <% if number == @filter.page %>
+                <span class="pagination-link is-current" aria-current="page"><%= number %></span>
+              <% else %>
+                <%= link_to number, filter_link(page: number), class: "pagination-link",
+                  data: { turbo_frame: "dashboard", turbo_action: "advance" } %>
+              <% end %>
+            <% end %>
+
+            <% if @filter.page < @filter.page_count %>
+              <%= link_to "Next", filter_link(page: @filter.page + 1), rel: "next",
+                class: "pagination-link", data: { turbo_frame: "dashboard", turbo_action: "advance" } %>
+            <% else %>
+              <span class="pagination-link is-disabled" aria-disabled="true">Next</span>
+            <% end %>
+          </nav>
+        <% end %>
       </section>
     </div>
 
