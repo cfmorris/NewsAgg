@@ -42,6 +42,9 @@ jobs:
       - name: Dashboard integration test
         shell: pwsh
         run: bundle exec ruby test/integration/dashboard_test.rb
+      - name: Infographic integration test
+        shell: pwsh
+        run: bundle exec ruby test/integration/infographic_test.rb
       - name: Ingestion integration test
         shell: pwsh
         run: bundle exec ruby test/integration/ingestion_test.rb
