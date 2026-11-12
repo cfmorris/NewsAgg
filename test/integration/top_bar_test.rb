@@ -30,15 +30,8 @@ ActiveRecord::Base.establish_connection(
 )
 ActiveRecord::MigrationContext.new(Rails.root.join("db/migrate")).migrate
 
-# The admin console root is a separate card: its route does not exist yet. The
-# bar must pick it up the moment it does, so this test introduces it and then
-# checks the link renders - no hardcoded 404s. The Profile link's route
-# (/account) ships with the app, so that one is not stubbed here.
-Rails.application.routes.append do
-  namespace :admin do
-    root to: "users#index"
-  end
-end
+# Both account-area routes (/account and /admin) ship with the app now, so the
+# bar is checked against the real helpers rather than a stub.
 
 rows = [{
   "title" => "A headline for the bar", "summary" => "Archive content.",

@@ -37,6 +37,24 @@ class User < ApplicationRecord
     disabled_at.present?
   end
 
+  # Every number the admin console shows, from one grouped query: the total per
+  # role and, alongside it, how many of those accounts are disabled. Adding a
+  # role to ROLES adds its count to the page without touching this method.
+  def self.console_summary
+    counts = ROLES.index_with(0)
+    disabled = 0
+
+    group(:role)
+      .pluck(:role, Arel.sql("COUNT(*)"),
+             Arel.sql("SUM(CASE WHEN disabled_at IS NOT NULL THEN 1 ELSE 0 END)"))
+      .each do |role, total, off|
+        counts[role.to_s] = total
+        disabled += off.to_i
+      end
+
+    { counts: counts, disabled: disabled }
+  end
+
   # Devise consults this on every sign-in; a disabled account is refused with
   # the standard "not active" message while its password stays untouched.
   def active_for_authentication?

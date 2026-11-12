@@ -2,6 +2,10 @@ Rails.application.routes.draw do
   devise_for :users
 
   namespace :admin do
+    # The console's front door. It is the namespace root, so /admin/users and
+    # its members keep their own paths untouched.
+    root to: "console#show"
+
     resources :users, only: [:index] do
       member do
         patch :role
