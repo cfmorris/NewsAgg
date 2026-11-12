@@ -250,18 +250,42 @@ TestReport.run do
       assert(raised, "IngestBatch still accepts an implicit Hacker News adapter")
     end
 
-    check "the fixture allowlist builds no adapter and therefore runs nothing" do
+    check "the fixture allowlist builds an RSS adapter and reports the api entry it cannot adapt" do
       fetcher = SpyFetcher.new
       runner, err = runner_for.call(fetcher, registry: allowlist)
+      adapters = runner.adapters_for(allowlist)
+
+      assert(adapters.keys == ["Acceptance Alpha"],
+        "adapters were built for #{adapters.keys.inspect}")
+      assert(adapters.values.all? { |adapter| adapter.is_a?(RssClient) },
+        "the rss fixture entry did not build an RSS adapter")
+      assert(err.string.include?("has no adapter"),
+        "the runner did not report the unadaptable api source: #{err.string.inspect}")
+      assert(err.string.include?("Acceptance Beta"),
+        "the report did not name the unadaptable source: #{err.string.inspect}")
+      assert(fetcher.calls.empty?, "building adapters fetched #{fetcher.calls.inspect}")
+    end
+
+    check "an enabled source with no adapter runs nothing and fetches nothing" do
+      fetcher = SpyFetcher.new
+      api_only_path = File.join(directory, "api-only.yml")
+      File.write(api_only_path, <<~YAML)
+        sources:
+          - name: Acceptance Beta
+            kind: api
+            url: https://beta.acceptance.test/items
+      YAML
+      api_only = SourceRegistry.load(path: api_only_path)
+      runner, err = runner_for.call(fetcher, registry: api_only)
       code = runner.run(feed: "new", limit: 5)
 
       assert(code.zero?, "expected exit code 0, got #{code}")
-      assert(runner.adapters_for(allowlist).empty?,
-        "adapters were built for #{runner.adapters_for(allowlist).keys.inspect}")
-      assert(fetcher.calls.empty?, "the fixture allowlist fetched #{fetcher.calls.inspect}")
-      assert(runner.last_result[:new_stories].zero?, "the fixture allowlist produced a record")
+      assert(runner.adapters_for(api_only).empty?,
+        "an api entry without an adapter built #{runner.adapters_for(api_only).keys.inspect}")
+      assert(fetcher.calls.empty?, "the unadapted allowlist fetched #{fetcher.calls.inspect}")
+      assert(runner.last_result[:new_stories].zero?, "the unadapted allowlist produced a record")
       assert(err.string.include?("has no adapter"),
-        "the runner did not report the missing adapters: #{err.string.inspect}")
+        "the runner did not report the missing adapter: #{err.string.inspect}")
     end
 
     check "an empty allowlist runs nothing and needs no LLM provider" do

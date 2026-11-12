@@ -23,6 +23,12 @@ class HttpClient
     raise Error, "#{url} returned invalid JSON"
   end
 
+  # Fetches a non-JSON document such as an RSS feed, with an explicit Accept
+  # header. Same timeout and error contract as get_json.
+  def get_text(url, accept: "application/xml, text/xml;q=0.9, */*;q=0.1", timeout: 15)
+    get(url, timeout: timeout, accept: accept)
+  end
+
   def post_json(url, headers: {}, body:, timeout: 30)
     uri = URI.parse(url)
     request = Net::HTTP::Post.new(uri.request_uri)
@@ -41,10 +47,10 @@ class HttpClient
 
   private
 
-  def get(url, timeout:)
+  def get(url, timeout:, accept: "application/json")
     uri = URI.parse(url)
     request = Net::HTTP::Get.new(uri.request_uri)
-    request["accept"] = "application/json"
+    request["accept"] = accept
     response = start(uri, timeout).start { |http| http.request(request) }
     unless response.is_a?(Net::HTTPSuccess)
       raise Error.new("#{url} returned HTTP #{response.code}", retry_after: retry_after_seconds(response))

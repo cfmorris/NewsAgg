@@ -83,7 +83,7 @@ class Archive
                {topic: t.name, heading: s.pref_label, id: s.concept_id, scheme: s.scheme}] AS topic_mappings,
              [(article)-[:DISCOVERED_VIA]->(d) | d.source] AS sources,
              [(article)-[:DISCOVERED_VIA]->(d) WHERE d.url IS NOT NULL |
-                {source: d.source, url: d.url}] AS discoveries
+                {source: d.source, url: d.url, external_id: d.external_id}] AS discoveries
       ORDER BY article.added_at DESC, article.url
     CYPHER
       timestamp = article.delete("added_at")

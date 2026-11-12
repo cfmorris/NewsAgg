@@ -107,6 +107,17 @@ TestReport.run do
     empty_path = File.join(directory, "empty.yml")
     File.write(empty_path, "sources: []\n")
     empty_registry = SourceRegistry.load(path: empty_path)
+    # The remaining source shape with no adapter: an API entry that is not the
+    # Hacker News API. RSS entries get an adapter now, so the "reported, never
+    # replaced by a built-in" checks below use this registry.
+    unadapted_path = File.join(directory, "unadapted.yml")
+    File.write(unadapted_path, <<~YAML)
+      sources:
+        - name: Unadapted API
+          kind: api
+          url: https://unadapted.example/api
+    YAML
+    unadapted_registry = SourceRegistry.load(path: unadapted_path)
 
     batch_for = lambda do |adapters, fetcher, retries: [], against: registry|
       IngestBatch.new(
@@ -275,7 +286,7 @@ TestReport.run do
       runner = IngestionRunner.new(
         archive: SilentArchive.new, retry_path: retry_path, fetcher: fetcher,
         summarizer: StubSummarizer.new, out: StringIO.new, err: err, env: {},
-        registry: registry
+        registry: unadapted_registry
       )
       code = runner.run(feed: "new", limit: 5)
 
@@ -309,15 +320,18 @@ TestReport.run do
         "the run result counted #{runner.last_result[:dropped]} drops")
     end
 
-    check "the runner passes only enabled allowlist entries to the batch" do
+    check "the runner builds adapters for enabled entries only" do
       err = StringIO.new
       runner = IngestionRunner.new(
         archive: SilentArchive.new, retry_path: retry_path, fetcher: SpyFetcher.new,
         out: StringIO.new, err: err, env: {}, registry: registry
       )
-      names = runner.adapters_for(registry).keys
+      adapters = runner.adapters_for(registry)
 
-      assert(names == [], "adapters were built for #{names.inspect} without an adapter for rss sources")
+      assert(adapters.keys.sort == ["Narrow Feed", "Registered Feed"],
+        "adapters were built for #{adapters.keys.sort.inspect}")
+      assert(adapters.values.all? { |adapter| adapter.is_a?(RssClient) },
+        "an rss entry did not build an RSS adapter")
       assert(!err.string.include?("Quiet Feed"),
         "a disabled source was reported as enabled: #{err.string.inspect}")
     end

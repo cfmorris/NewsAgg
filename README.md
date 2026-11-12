@@ -86,8 +86,18 @@ start a puller. Set `NEWSAGG_AUTO_PULL=0` to keep the web process from pulling.
 `config/sources.yml` is the single explicit list of ingest sources. Every entry
 declares `name`, `kind` (`rss` or `api`), `url`, `enabled`, `override`,
 `max_items`, `min_words`, `domains`/`exclude_domains`, and `owner` (null for the
-shared sources, an owner id for future per-owner paid ones). Hacker News and
-Lobsters are listed and enabled today.
+shared sources, an owner id for future per-owner paid ones). Three sources are listed and
+enabled today: the Hacker News API, the Lobsters API, and The Software Analyst's
+Substack feed.
+
+`kind` picks the adapter. `api` entries are adapted only when their `url` is a
+known API (Hacker News or Lobsters), and `rss` entries are read by `RssClient`, which parses RSS 2.0
+and Atom into the same candidate shape the API adapter emits (`title`, `url`,
+`source`, `external_id`, `discovery_url`, `submitted_at`, `score`). An item with
+no `guid` is identified by its normalized URL, a relative link is resolved
+against the feed URL, and repeated guids — inside one poll or across polls — are
+skipped before the article is fetched. An enabled entry that no adapter can read
+is reported as `has no adapter` and contributes nothing.
 
 The file is parsed and validated at boot: a missing file, unknown or missing
 `kind`, missing or non-http `url`, duplicate `name`, unknown key, or malformed
@@ -105,7 +115,10 @@ entries are not polled at all, a candidate with no source is never attributed to
 the feed that surfaced it, and the retry file is gated the same way, so removing
 or disabling a source stops its backlog too. Each refusal is logged as
 `source gate: dropped candidate source=... reason=... url=...` with a run summary,
-and `last_result` carries the drop count and per-reason totals.
+and `last_result` carries the drop count and per-reason totals. A source whose
+adapter fails — an unreachable or malformed feed — is logged as
+`reason=adapter_failed` with the adapter's message and the rest of the run
+continues.
 
 The Lobsters adapter reads its allowlist entry's URL (one JSON poll, no per-item
 requests) and yields the same candidate shape as Hacker News. A Lobsters
@@ -326,6 +339,8 @@ bundle exec ruby test/integration/quality_score_test.rb
 bundle exec ruby test/integration/source_score_test.rb
 bundle exec ruby test/integration/long_form_test.rb
 bundle exec ruby test/integration/source_registry_test.rb
+bundle exec ruby test/integration/source_gate_test.rb
+bundle exec ruby test/integration/rss_adapter_test.rb
 bundle exec ruby test/acceptance/source_allowlist_acceptance_test.rb
 bundle exec ruby test/integration/auto_pull_test.rb
 bundle exec ruby test/integration/auto_pull_budget_test.rb
@@ -386,7 +401,12 @@ the pre-fetch allowlist: an unregistered candidate, an embedded link labelled
 with an unlisted source, a candidate with no source, a disabled entry and a
 disallowed domain are all dropped with a recorded reason and a spy fetcher that
 is never called, while a registered enabled source passes and an empty allowlist
-runs a whole pass without a fetch. The third drives the
+runs a whole pass without a fetch. The RSS adapter test parses a recorded feed
+into the shared candidate shape, covers guid-less items, relative links,
+duplicate guids within one feed and across two polls (one article, one
+discovery), a 30-item feed under a 25-item limit, and a malformed feed that is
+reported as `adapter_failed` while the healthy source in the same pass still
+imports. The third drives the
 in-process Auto-pull supervisor with a fake ingestion runner and a short
 interval: immediate pull on enable, the next tick,
 stopping on disable, skipping an in-flight trigger, the `/auto-pull` payload, the

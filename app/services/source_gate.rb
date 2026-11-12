@@ -22,8 +22,9 @@ class SourceGate
     end
   end
 
-  # One dropped candidate or source, kept for logging and run results.
-  Drop = Struct.new(:source, :url, :reason, keyword_init: true)
+  # One dropped candidate or source, kept for logging and run results. `detail`
+  # carries the adapter's own error message when a source failed outright.
+  Drop = Struct.new(:source, :url, :reason, :detail, keyword_init: true)
 
   MISSING_SOURCE = :missing_source
   UNREGISTERED_SOURCE = :unregistered_source
@@ -31,6 +32,10 @@ class SourceGate
   PAUSED_SOURCE = :paused_source
   MISSING_URL = :missing_url
   DOMAIN_NOT_ALLOWED = :domain_not_allowed
+  # A source that is registered and enabled but whose adapter failed to produce
+  # candidates (an unreachable or malformed feed). Its items are lost for this
+  # run; every other source still runs.
+  ADAPTER_FAILED = :adapter_failed
 
   # `paused` is the set of source ids the score has stopped (Archive
   # #paused_source_ids). A paused source is a registered, enabled source whose
@@ -114,9 +119,9 @@ class SourceGate
       @drops = []
     end
 
-    def add(source:, url:, reason:)
+    def add(source:, url:, reason:, detail: nil)
       @drops << Drop.new(source: source.nil? ? nil : source.to_s, url: url.nil? ? nil : url.to_s,
-        reason: reason)
+        reason: reason, detail: detail.nil? ? nil : detail.to_s)
       self
     end
 
@@ -133,12 +138,14 @@ class SourceGate
       drops.each_with_object(Hash.new(0)) { |drop, totals| totals[drop.reason] += 1 }
     end
 
-    # One line per refusal, safe to write to stderr: source names and candidate
-    # URLs only, never page content or secrets.
+    # One line per refusal, safe to write to stderr: source names, candidate
+    # URLs and the adapter's own redacted error only, never page content or
+    # secrets.
     def lines
       drops.map do |drop|
-        "source gate: dropped candidate source=#{drop.source.inspect} reason=#{drop.reason} " \
+        line = "source gate: dropped candidate source=#{drop.source.inspect} reason=#{drop.reason} " \
           "url=#{drop.url.inspect}"
+        drop.detail.nil? ? line : "#{line} detail=#{drop.detail.inspect}"
       end
     end
 

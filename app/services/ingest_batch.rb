@@ -65,27 +65,36 @@ class IngestBatch
 
     each_admitted_source(report) do |source, adapter|
       per_source_limit = [limit, source.max_items].min
-      adapter.collect_candidates(feed: feed, limit: per_source_limit, archive_rows: archive_rows)
-        .each do |story|
-          next unless story.is_a?(Hash)
+      stories = begin
+        adapter.collect_candidates(feed: feed, limit: per_source_limit, archive_rows: archive_rows)
+      rescue StandardError => error
+        # One unreachable or malformed source costs its own candidates, not the
+        # run: report it and keep polling the rest of the allowlist.
+        report.add(source: source.name, url: nil, reason: SourceGate::ADAPTER_FAILED,
+          detail: failure_reason(error))
+        next
+      end
 
-          resolved = @gate.admit(story)
-          if resolved.dropped?
-            report.add(source: story["source"], url: story["url"], reason: resolved.reason)
-            next
-          end
+      Array(stories).each do |story|
+        next unless story.is_a?(Hash)
 
-          story = gated_story(story, resolved)
-          key = UrlKey.call(story["url"])
-          next unless key
-
-          existing = candidates[key]
-          candidates[key] = if existing
-            { story: existing[:story].merge(story), record: existing[:record], attempts: existing[:attempts] }
-          else
-            { story: story, record: nil, attempts: 0 }
-          end
+        resolved = @gate.admit(story)
+        if resolved.dropped?
+          report.add(source: story["source"], url: story["url"], reason: resolved.reason)
+          next
         end
+
+        story = gated_story(story, resolved)
+        key = UrlKey.call(story["url"])
+        next unless key
+
+        existing = candidates[key]
+        candidates[key] = if existing
+          { story: existing[:story].merge(story), record: existing[:record], attempts: existing[:attempts] }
+        else
+          { story: story, record: nil, attempts: 0 }
+        end
+      end
     end
 
     records = []

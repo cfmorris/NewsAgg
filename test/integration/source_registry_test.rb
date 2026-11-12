@@ -56,10 +56,23 @@ TestReport.run do
     end
 
     check "the registry holds exactly the explicitly listed shared sources" do
-      assert(boot_registry.names == ["Hacker News", "Lobsters"],
+      assert(boot_registry.names == ["Hacker News", "Lobsters", "The Software Analyst"],
         "expected only the explicitly listed sources, got #{boot_registry.names.inspect}")
-      assert(boot_registry.enabled_names == boot_registry.names,
+      assert(boot_registry.enabled_names == ["Hacker News", "Lobsters", "The Software Analyst"],
         "enabled sources were #{boot_registry.enabled_names.inspect}")
+    end
+
+    check "the RSS entry carries a validated kind, url, limits, domain rules and a null owner" do
+      source = boot_registry.fetch("The Software Analyst")
+      assert(source.rss?, "expected kind rss, got #{source.kind.inspect}")
+      assert(source.enabled?, "the listed RSS source is disabled")
+      assert(source.url == "https://softwareanalyst.substack.com/feed",
+        "unexpected url #{source.url.inspect}")
+      assert(source.max_items.is_a?(Integer) && source.max_items.positive?,
+        "max_items was #{source.max_items.inspect}")
+      assert(source.domains == ["softwareanalyst.substack.com"],
+        "domains were #{source.domains.inspect}")
+      assert(source.owner.nil?, "owner must stay nullable for shared sources, got #{source.owner.inspect}")
     end
 
     check "the Hacker News entry carries a validated kind, url, limits, domain rules and a null owner" do
