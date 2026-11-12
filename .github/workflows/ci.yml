@@ -89,6 +89,9 @@ jobs:
       - name: Source registry integration test
         shell: pwsh
         run: bundle exec ruby test/integration/source_registry_test.rb
+      - name: Source gate integration test
+        shell: pwsh
+        run: bundle exec ruby test/integration/source_gate_test.rb
       - name: Auto-pull integration test
         shell: pwsh
         run: bundle exec ruby test/integration/auto_pull_test.rb
