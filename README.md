@@ -183,6 +183,10 @@ disposable server. Add `-Keep` to inspect the `tmp/neo4j-test-*` directory after
 a failure. GitHub Actions runs all three test commands in the required `checks`
 job.
 
+The `checks` job takes about two minutes. [docs/ci-performance.md](docs/ci-performance.md)
+records the per-step timings, the sharding/ubuntu options that were weighed, and
+why the job is not being optimised right now.
+
 ## Hermes Kanban development
 
 The local `newsagg` Hermes board uses the existing gateway and DeepSeek Flash.
