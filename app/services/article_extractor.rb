@@ -4,6 +4,13 @@ require "uri"
 # Extracts publisher, text and publication date from public article HTML.
 class ArticleExtractor
   MAX_TEXT = 12_000
+
+  # How much body text extraction keeps. Long documents are summarized in
+  # windows of MAX_TEXT, so extraction has to hold more than one window or the
+  # chunker would be handed text that was already truncated. This is exactly
+  # ArticleChunker::MAX_CHUNKS windows.
+  MAX_EXTRACTED_TEXT = 120_000
+
   MAX_PUBLISHER = 120
   MAX_TITLE = 300
 
@@ -39,6 +46,18 @@ class ArticleExtractor
     text.each_char.to_a.first(limit).join.strip
   end
 
+  # Body text. Like clean_text, but paragraph and heading line breaks survive so
+  # a long document can be split on its own structure, and the cap is the
+  # extraction limit instead of one summarizer window.
+  def clean_body(value, limit = MAX_EXTRACTED_TEXT)
+    text = normalize_text(value)
+    text = decode_entities(text)
+    3.times { text = text.gsub(/<[^>]*>/, " ") if text.include?("<") }
+    text = text.gsub(UNSAFE_CHARS, " ").gsub(/[<>]/, " ")
+    text = text.gsub(/[^\S\n]+/, " ").gsub(/ *\n */, "\n").gsub(/\n{2,}/, "\n").strip
+    text.each_char.to_a.first(limit).join.rstrip
+  end
+
   def sanitize_publisher(value, fallback = "")
     text = clean_text(value, MAX_PUBLISHER).sub(/\A@+/, "").strip
     text.empty? ? fallback : text
@@ -58,7 +77,7 @@ class ArticleExtractor
         final_url: uri.to_s,
         title: "",
         publisher: sanitize_publisher("", fallback_publisher),
-        text: clean_text(source),
+        text: clean_body(source),
         published_date: nil
       }
     end
@@ -70,10 +89,10 @@ class ArticleExtractor
       meta["twitter:site"] || structured["author"]
     publisher = sanitize_publisher(raw_publisher, fallback_publisher)
 
-    text = clean_text(html_to_text(source))
+    text = clean_body(html_to_text(source))
     if text.length < 80
       description = meta["og:description"] || meta["description"] || ""
-      text = clean_text("#{description} #{text}")
+      text = clean_body("#{description} #{text}")
     end
 
     published = published_date(
@@ -180,10 +199,14 @@ class ArticleExtractor
     body = preferred ? preferred[2] : html
     body = body.gsub(%r{<(script|style|noscript|template|svg|iframe|object)\b[^>]*>[\s\S]*?</\1>}i, " ")
     body = body.gsub(/<!--[\s\S]*?-->/, " ")
-    body = body.gsub(%r{</(p|div|li|h[1-6]|tr|section|article|main|blockquote)>}i, "\n")
+    # A heading keeps a line of its own and is marked with "## ", so a long
+    # document can be split where its author split it and the summarizer sees
+    # the structure. Every other block ends a line.
+    body = body.gsub(%r{<h([1-6])\b[^>]*>}i, "\n## ")
+    body = body.gsub(%r{</(p|div|li|h[1-6]|tr|td|th|section|article|main|blockquote|figure|figcaption|table|pre|dd|dt)>}i, "\n")
     body = body.gsub(/<br\s*\/?>/i, "\n")
     body = body.gsub(/<[^>]*>/, " ")
-    decode_entities(body).gsub(/\s+/, " ").strip
+    decode_entities(body)
   end
 
   def published_date(value)

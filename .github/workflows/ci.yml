@@ -101,6 +101,9 @@ jobs:
       - name: Source score and auto-pause integration test
         shell: pwsh
         run: bundle exec ruby test/integration/source_score_test.rb
+      - name: Long-form summarization integration test
+        shell: pwsh
+        run: bundle exec ruby test/integration/long_form_test.rb
       - name: Source registry integration test
         shell: pwsh
         run: bundle exec ruby test/integration/source_registry_test.rb
