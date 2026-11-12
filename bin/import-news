@@ -2,6 +2,13 @@
 require "json"
 
 require_relative "../app/services/import_records"
+require_relative "../app/services/source_registry"
+
+begin
+  SourceRegistry.load!
+rescue SourceRegistry::ConfigError => error
+  abort error.message
+end
 
 records = begin
   JSON.parse($stdin.read)
