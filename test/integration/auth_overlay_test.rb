@@ -160,6 +160,33 @@ TestReport.run do
            "the full sign-in page renders the embedded card")
   end
 
+  # The frame used to pin itself to a fixed 520px, so the taller card scrolled
+  # inside it and both ends were cut off: the heading at the top, the last link
+  # below the fold. The frame now carries the embedded card's own height and the
+  # stylesheet caps it at the viewport, so a longer form scrolls inside the frame
+  # instead of being clipped.
+  check "the frame is sized from the embedded card, not from a fixed height" do
+    session = new_session
+    session.get("/dashboard.css")
+    assert(session.last_response.status == 200,
+           "GET /dashboard.css answered #{session.last_response.status}")
+    css = session.last_response.body
+
+    frame_rule = css[%r!\.auth-overlay-frame\s*\{[^}]*\}!m].to_s
+    assert(!frame_rule.empty?, "the stylesheet has no .auth-overlay-frame rule")
+    assert(!frame_rule.match?(/(?<![\w-])height:\s*[\d.]+px/),
+           "the frame still assumes one form's length: #{frame_rule}")
+    assert(frame_rule.match?(/max-height:\s*calc\(100vh - 2\.5rem\)/),
+           "the frame has no viewport cap: #{frame_rule}")
+
+    session.get("/dashboard.js")
+    js = session.last_response.body
+    assert(js.match?(/querySelector\("\.auth-card"\)/),
+           "the overlay script never measures the embedded card")
+    assert(js.match?(/frame\.style\.height\s*=/),
+           "the overlay script never gives the frame the card's height")
+  end
+
   check "signing in through the embedded form lands on the dashboard" do
     user = account("overlay-reader@example.com")
     session = new_session
