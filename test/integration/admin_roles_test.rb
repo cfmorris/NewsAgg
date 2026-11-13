@@ -54,9 +54,11 @@ def set_state(session, user, state)
 end
 
 # The page the browser ends up on after a refusal, whether the app answered
-# with the page itself or with a redirect to it.
+# with the page itself or with a redirect to it. A refusal can hand the browser
+# on twice - to Devise's sign-in route and then to the landing page's card - so
+# follow until it settles on a page.
 def followed_body(session)
-  session.follow_redirect! if session.last_response.status.between?(300, 399)
+  3.times { session.follow_redirect! if session.last_response.status.between?(300, 399) }
   session.last_response.body.to_s
 end
 
