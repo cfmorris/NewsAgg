@@ -18,8 +18,10 @@ require "tmpdir"
 require_relative "../../config/environment"
 require_relative "../support/assertions"
 require_relative "../support/fake_archive"
+require_relative "../support/signed_in_probe"
 
 include TestReport
+include SignedInProbe
 
 MFA_FLOW_DB_DIR = Dir.mktmpdir("newsagg-mfa-flow-")
 at_exit do
@@ -60,13 +62,6 @@ def signed_in_session(user)
   session = new_session
   sign_in(session, user.email)
   session
-end
-
-# Devise bounces an authenticated visitor from the sign-in page, so a redirect
-# there is proof the session carries a user.
-def signed_in?(session)
-  session.get("/users/sign_in")
-  session.last_response.status == 302
 end
 
 # The text of a labelled element, so a check can name the exact figure it means

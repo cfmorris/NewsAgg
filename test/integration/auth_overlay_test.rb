@@ -58,6 +58,12 @@ def field_names(form)
   form.scan(/name="([^"]+)"/).flatten.sort
 end
 
+# Every anchor a page renders, by href. The link set is what has to keep
+# answering, whichever Devise modules the User model enables.
+def anchor_hrefs(body)
+  body.scan(/<a [^>]*href="([^"]*)"/).flatten.sort
+end
+
 def top_bar_present?(body)
   body.match?(/class="topbar"/) || body.include?("topbar-account")
 end
@@ -151,13 +157,45 @@ TestReport.run do
   check "a direct visit to the sign-in page still renders the top bar" do
     session = new_session
     session.get("/users/sign_in")
+    # Once the deep link lands, a guest is handed to the landing page, where the
+    # same form opens in the card's frame; before that, the form is in the page.
+    session.follow_redirect! if session.last_response.redirect?
 
     response = session.last_response
     assert(response.status == 200, "GET /users/sign_in answered #{response.status}")
-    assert(top_bar_present?(response.body), "the full sign-in page lost its top bar")
-    assert(response.body.include?('name="user[email]"'), "the full sign-in page lost its email field")
+    assert(top_bar_present?(response.body), "the page a direct sign-in visit lands on lost its top bar")
+    assert(response.body.include?('name="user[email]"') ||
+           response.body.include?('data-auth-overlay-src="/users/sign_in?embedded=1"'),
+           "the page a direct sign-in visit lands on offers no sign-in form")
     assert(!response.body.include?('class="auth-card"'),
            "the full sign-in page renders the embedded card")
+  end
+
+  # The frame used to pin itself to a fixed 520px, so the taller card scrolled
+  # inside it and both ends were cut off: the heading at the top, the last link
+  # below the fold. The frame now carries the embedded card's own height and the
+  # stylesheet caps it at the viewport, so a longer form scrolls inside the frame
+  # instead of being clipped.
+  check "the frame is sized from the embedded card, not from a fixed height" do
+    session = new_session
+    session.get("/dashboard.css")
+    assert(session.last_response.status == 200,
+           "GET /dashboard.css answered #{session.last_response.status}")
+    css = session.last_response.body
+
+    frame_rule = css[%r!\.auth-overlay-frame\s*\{[^}]*\}!m].to_s
+    assert(!frame_rule.empty?, "the stylesheet has no .auth-overlay-frame rule")
+    assert(!frame_rule.match?(/(?<![\w-])height:\s*[\d.]+px/),
+           "the frame still assumes one form's length: #{frame_rule}")
+    assert(frame_rule.match?(/max-height:\s*calc\(100vh - 2\.5rem\)/),
+           "the frame has no viewport cap: #{frame_rule}")
+
+    session.get("/dashboard.js")
+    js = session.last_response.body
+    assert(js.match?(/querySelector\("\.auth-card"\)/),
+           "the overlay script never measures the embedded card")
+    assert(js.match?(/frame\.style\.height\s*=/),
+           "the overlay script never gives the frame the card's height")
   end
 
   check "signing in through the embedded form lands on the dashboard" do
@@ -194,5 +232,52 @@ TestReport.run do
     session.get("/dashboard")
     assert(session.last_response.status == 302,
            "a failed sign-in left the visitor signed in: dashboard answered #{session.last_response.status}")
+  end
+
+  # The card's links are Devise's, rendered from whichever modules the User
+  # model enables. A module turned on without a working route behind it - or
+  # turned off while the view still offers its link - shows up here.
+  check "every link on the embedded sign-in card leads somewhere that answers" do
+    session = new_session
+    session.get("/users/sign_in?embedded=1")
+    body = session.last_response.body
+
+    hrefs = anchor_hrefs(body)
+    assert(hrefs == ["/users/password/new", "/users/sign_up?embedded=1", "/users/unlock/new"],
+           "the sign-in card's link set changed: #{hrefs.inspect}")
+
+    hrefs.each do |href|
+      target = new_session
+      target.get(href)
+      assert(target.last_response.status == 200,
+             "the sign-in card's #{href} link answered #{target.last_response.status}")
+    end
+  end
+
+  # A link that renders is not yet a link that works: /users/unlock/new answers
+  # 200 whether or not its form can send anything. The fixture account is locked
+  # the way Devise locks one, so the email has to arrive and its token has to
+  # unlock the account.
+  check "the unlock link reaches a form that unlocks the account" do
+    user = account("overlay-locked@example.com")
+    user.lock_access!
+    ActionMailer::Base.deliveries.clear
+
+    session = new_session
+    session.get("/users/unlock/new")
+    assert(session.last_response.status == 200,
+           "the unlock form answered #{session.last_response.status}")
+
+    session.post("/users/unlock", user: { email: user.email })
+    assert(ActionMailer::Base.deliveries.any?, "the unlock form sent no mail")
+
+    mail = ActionMailer::Base.deliveries.last
+    assert(mail.to == [user.email], "the unlock mail went to #{mail.to.inspect}")
+    unlock_path = mail.body.to_s[%r{/users/unlock\?unlock_token=[^"]+}]
+    assert(unlock_path, "the unlock mail carries no unlock link: #{mail.body}")
+
+    unlock = new_session
+    unlock.get(unlock_path)
+    assert(!user.reload.access_locked?, "the mailed unlock link did not unlock the account")
   end
 end

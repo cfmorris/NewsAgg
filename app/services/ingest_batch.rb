@@ -4,6 +4,7 @@ require "uri"
 require_relative "article_chunker"
 require_relative "article_extractor"
 require_relative "deepseek_summarizer"
+require_relative "ingest_failures"
 require_relative "long_form"
 require_relative "quality_score"
 require_relative "safe_fetcher"
@@ -191,7 +192,7 @@ class IngestBatch
         records << record
       rescue StandardError => error
         failures << {
-          "story" => story_for_record(story),
+          "story" => IngestFailures.story(story),
           "record" => nil,
           "reason" => failure_reason(error),
           "attempts" => candidate[:attempts] + 1,
@@ -239,25 +240,9 @@ class IngestBatch
   end
 
   def failure_reason(error)
-    text = clean_text(redact(error.respond_to?(:message) ? error.message : error.to_s), MAX_REASON)
+    text = clean_text(IngestFailures.redact(error.respond_to?(:message) ? error.message : error.to_s, @secrets),
+      MAX_REASON)
     text.empty? ? "Unknown ingestion failure" : text
-  end
-
-  def story_for_record(record)
-    story = {
-      "url" => record["url"], "title" => record["title"],
-      "source" => record["source"], "external_id" => record["external_id"]
-    }
-    story["discovery_url"] = record["discovery_url"] if record["discovery_url"]
-    story
-  end
-
-  def redact(value)
-    text = String(value)
-    @secrets.each do |secret|
-      text = text.split(secret).join("[redacted]") if secret.is_a?(String) && secret.length >= 4
-    end
-    text
   end
 
   private

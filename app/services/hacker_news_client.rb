@@ -1,6 +1,7 @@
 require "json"
 require "uri"
 
+require_relative "discovery_keys"
 require_relative "http_client"
 require_relative "url_key"
 
@@ -68,21 +69,14 @@ class HackerNewsClient
   end
 
   def archive_keys(rows)
-    known_urls = []
-    known_discussions = []
-    Array(rows).each do |article|
-      key = UrlKey.call(article["url"])
-      known_urls << key if key
-      Array(article["discoveries"]).each do |discovery|
-        next unless discovery.is_a?(Hash) && discovery["source"] == name
-        next unless discovery["url"].is_a?(String)
+    DiscoveryKeys.call(rows, name) do |discovery|
+      next nil unless discovery["url"].is_a?(String)
 
-        id = URI.decode_www_form(URI.parse(discovery["url"]).query.to_s).to_h["id"]
-        known_discussions << id if id
+      begin
+        URI.decode_www_form(URI.parse(discovery["url"]).query.to_s).to_h["id"]
       rescue URI::InvalidURIError
-        next
+        nil
       end
     end
-    [known_urls, known_discussions]
   end
 end
