@@ -9,8 +9,10 @@ require "tmpdir"
 
 require_relative "../../config/environment"
 require_relative "../support/assertions"
+require_relative "../support/signed_in_probe"
 
 include TestReport
+include SignedInProbe
 
 AUTH_DB_DIR = Dir.mktmpdir("newsagg-auth-")
 at_exit do
@@ -28,13 +30,6 @@ ActiveRecord::MigrationContext.new(Rails.root.join("db/migrate")).migrate
 
 def new_session
   Rack::Test::Session.new(Rails.application)
-end
-
-def signed_in?(session)
-  # Devise's sign-in page bounces an authenticated visitor, so a redirect there
-  # is proof the session carries a user.
-  session.get("/users/sign_in")
-  session.last_response.status == 302
 end
 
 def sign_up(session, email, password: "correct horse battery")
@@ -114,9 +109,10 @@ TestReport.run do
 
     session = new_session
     sign_in(session, user.email, "correct horse battery")
+    sign_in_body = session.last_response.body.to_s
 
     assert signed_in?(session), "an MFA-free user was not signed in"
-    assert !session.last_response.body.to_s.include?("one-time password"),
+    assert !sign_in_body.include?("one-time password"),
            "a user with MFA off was asked for an OTP"
   end
 

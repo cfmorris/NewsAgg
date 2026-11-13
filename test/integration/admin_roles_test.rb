@@ -11,8 +11,10 @@ require "tmpdir"
 
 require_relative "../../config/environment"
 require_relative "../support/assertions"
+require_relative "../support/signed_in_probe"
 
 include TestReport
+include SignedInProbe
 
 ADMIN_DB_DIR = Dir.mktmpdir("newsagg-admin-")
 at_exit do
@@ -37,13 +39,6 @@ end
 
 def sign_in(session, user, password: PASSWORD)
   session.post("/users/sign_in", user: { email: user.email, password: password })
-end
-
-def signed_in?(session)
-  # Devise bounces an authenticated visitor from the sign-in page, so a
-  # redirect there proves the session carries a user.
-  session.get("/users/sign_in")
-  session.last_response.status == 302
 end
 
 def account(email, role: :member)
