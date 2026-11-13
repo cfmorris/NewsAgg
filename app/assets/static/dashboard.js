@@ -334,6 +334,34 @@
     focusFrame(root);
   }
 
+  // The frame takes the embedded card's own height. A frame never shrink-wraps
+  // its document, and it used to carry a fixed 520px that fitted no form: the
+  // card scrolled inside it and both ends were cut off. Measuring with the
+  // document's own scrollbar hidden keeps the width the card will really have -
+  // a scrollbar would narrow it and inflate the height we read.
+  function fitFrame(root) {
+    var frame = frameOf(root);
+    if (!root || root.hidden || !frame) return;
+
+    var doc, card;
+    try {
+      doc = frame.contentDocument;
+      card = doc && doc.querySelector(".auth-card");
+    } catch (_) {
+      return;
+    }
+    if (!card) return;
+
+    var html = doc.documentElement;
+    html.style.overflowY = "hidden";
+    var height = Math.ceil(card.getBoundingClientRect().height + card.offsetTop);
+    html.style.overflowY = "";
+
+    // The stylesheet caps the frame at the viewport; past that the card scrolls
+    // inside the frame and the close control stays where it is.
+    if (height > 0) frame.style.height = height + "px";
+  }
+
   function open(link) {
     var root = overlay();
     var frame = frameOf(root);
@@ -345,7 +373,7 @@
     var label = link.getAttribute("data-auth-overlay") === "sign-up" ? "Create account" : "Sign in";
     if (title) title.textContent = label;
     frame.title = label + " to NewsAgg";
-    frame.onload = function () { bindFrame(root); };
+    frame.onload = function () { fitFrame(root); bindFrame(root); };
     frame.src = source;
 
     root.hidden = false;
