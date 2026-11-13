@@ -69,6 +69,9 @@ jobs:
       - name: Landing page and sign-in gate integration test
         shell: pwsh
         run: bundle exec ruby test/integration/sign_in_gate_test.rb
+      - name: Sign-in overlay and card links integration test
+        shell: pwsh
+        run: bundle exec ruby test/integration/auth_overlay_test.rb
       - name: Top bar integration test
         shell: pwsh
         run: bundle exec ruby test/integration/top_bar_test.rb

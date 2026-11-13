@@ -58,6 +58,12 @@ def field_names(form)
   form.scan(/name="([^"]+)"/).flatten.sort
 end
 
+# Every anchor a page renders, by href. The link set is what has to keep
+# answering, whichever Devise modules the User model enables.
+def anchor_hrefs(body)
+  body.scan(/<a [^>]*href="([^"]*)"/).flatten.sort
+end
+
 def top_bar_present?(body)
   body.match?(/class="topbar"/) || body.include?("topbar-account")
 end
@@ -194,5 +200,52 @@ TestReport.run do
     session.get("/dashboard")
     assert(session.last_response.status == 302,
            "a failed sign-in left the visitor signed in: dashboard answered #{session.last_response.status}")
+  end
+
+  # The card's links are Devise's, rendered from whichever modules the User
+  # model enables. A module turned on without a working route behind it - or
+  # turned off while the view still offers its link - shows up here.
+  check "every link on the embedded sign-in card leads somewhere that answers" do
+    session = new_session
+    session.get("/users/sign_in?embedded=1")
+    body = session.last_response.body
+
+    hrefs = anchor_hrefs(body)
+    assert(hrefs == ["/users/password/new", "/users/sign_up?embedded=1", "/users/unlock/new"],
+           "the sign-in card's link set changed: #{hrefs.inspect}")
+
+    hrefs.each do |href|
+      target = new_session
+      target.get(href)
+      assert(target.last_response.status == 200,
+             "the sign-in card's #{href} link answered #{target.last_response.status}")
+    end
+  end
+
+  # A link that renders is not yet a link that works: /users/unlock/new answers
+  # 200 whether or not its form can send anything. The fixture account is locked
+  # the way Devise locks one, so the email has to arrive and its token has to
+  # unlock the account.
+  check "the unlock link reaches a form that unlocks the account" do
+    user = account("overlay-locked@example.com")
+    user.lock_access!
+    ActionMailer::Base.deliveries.clear
+
+    session = new_session
+    session.get("/users/unlock/new")
+    assert(session.last_response.status == 200,
+           "the unlock form answered #{session.last_response.status}")
+
+    session.post("/users/unlock", user: { email: user.email })
+    assert(ActionMailer::Base.deliveries.any?, "the unlock form sent no mail")
+
+    mail = ActionMailer::Base.deliveries.last
+    assert(mail.to == [user.email], "the unlock mail went to #{mail.to.inspect}")
+    unlock_path = mail.body.to_s[%r{/users/unlock\?unlock_token=[^"]+}]
+    assert(unlock_path, "the unlock mail carries no unlock link: #{mail.body}")
+
+    unlock = new_session
+    unlock.get(unlock_path)
+    assert(!user.reload.access_locked?, "the mailed unlock link did not unlock the account")
   end
 end
