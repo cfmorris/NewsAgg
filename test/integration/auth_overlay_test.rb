@@ -157,11 +157,16 @@ TestReport.run do
   check "a direct visit to the sign-in page still renders the top bar" do
     session = new_session
     session.get("/users/sign_in")
+    # Once the deep link lands, a guest is handed to the landing page, where the
+    # same form opens in the card's frame; before that, the form is in the page.
+    session.follow_redirect! if session.last_response.redirect?
 
     response = session.last_response
     assert(response.status == 200, "GET /users/sign_in answered #{response.status}")
-    assert(top_bar_present?(response.body), "the full sign-in page lost its top bar")
-    assert(response.body.include?('name="user[email]"'), "the full sign-in page lost its email field")
+    assert(top_bar_present?(response.body), "the page a direct sign-in visit lands on lost its top bar")
+    assert(response.body.include?('name="user[email]"') ||
+           response.body.include?('data-auth-overlay-src="/users/sign_in?embedded=1"'),
+           "the page a direct sign-in visit lands on offers no sign-in form")
     assert(!response.body.include?('class="auth-card"'),
            "the full sign-in page renders the embedded card")
   end

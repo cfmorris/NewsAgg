@@ -159,6 +159,10 @@ TestReport.run do
     user = account("form-reader@example.com")
     session = new_session
     session.get("/users/sign_in")
+    # A direct visit is allowed to hand the guest to the card on the landing
+    # page; what matters here is the page it ends on, which still carries the
+    # top bar and still signs the reader in through the same form.
+    session.follow_redirect! if session.last_response.redirect?
 
     page = session.last_response
     assert(page.status == 200, "GET /users/sign_in answered #{page.status}")
@@ -175,6 +179,7 @@ TestReport.run do
     user = account("wrong-password@example.com")
     session = new_session
     session.get("/users/sign_in")
+    session.follow_redirect! if session.last_response.redirect?
     session.post("/users/sign_in", user: { email: user.email, password: "not the password" })
 
     assert(session.last_response.status == 200, "a failed sign-in answered #{session.last_response.status}")
