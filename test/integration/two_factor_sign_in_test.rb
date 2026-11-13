@@ -12,8 +12,10 @@ require "tmpdir"
 require_relative "../../config/environment"
 require_relative "../support/assertions"
 require_relative "../support/fake_archive"
+require_relative "../support/signed_in_probe"
 
 include TestReport
+include SignedInProbe
 
 MFA_DB_DIR = Dir.mktmpdir("newsagg-mfa-")
 at_exit do
@@ -65,13 +67,6 @@ def post_code(session, code, embedded: false)
   session.post("/users/sign_in/two_factor", params)
 end
 
-# Devise's sign-in page bounces an authenticated visitor, so a redirect there is
-# proof the session carries a user.
-def signed_in?(session)
-  session.get("/users/sign_in")
-  session.last_response.status == 302
-end
-
 def top_bar_present?(body)
   body.match?(/class="topbar"/) || body.include?("topbar-account")
 end
@@ -102,11 +97,11 @@ TestReport.run do
     assert(response.status == 302, "the code step answered #{response.status} instead of a redirect")
     assert(response["Location"].to_s.end_with?("/dashboard"),
            "the code step sent the reader to #{response['Location']}")
-    assert(signed_in?(session), "a valid code did not establish a session")
 
     # The code step completes the sign-in in the app's own controller, so this
     # is where a leftover welcome notice would show: the dashboard must not
-    # carry one.
+    # carry one. Follow the redirect before probing the session, so the probe's
+    # own request cannot replace the page this check is about.
     session.follow_redirect!
     assert(session.last_response.status == 200,
            "the dashboard answered #{session.last_response.status} after the code step")
@@ -114,6 +109,8 @@ TestReport.run do
            "the code step landed on the dashboard with a welcome notice")
     assert(!session.last_response.body.include?("Welcome!"),
            "the code step landed on the dashboard with a welcome notice")
+
+    assert(signed_in?(session), "a valid code did not establish a session")
 
     session.get("/dashboard")
     assert(session.last_response.status == 200,

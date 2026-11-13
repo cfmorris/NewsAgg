@@ -148,6 +148,9 @@ TestReport.run do
 
   check "the sign-in page loads its stylesheet and scripts" do
     page = request.get("/users/sign_in", host)
+    # The direct visit may first hand the guest to the landing page that frames
+    # the form; either way the page the reader lands on must serve its assets.
+    page = request.get(page["Location"], host) if page.redirect?
     assert(page.ok?, "expected the sign-in page to answer HTTP 200, got #{page.status}")
     urls = asset_urls(page.body)
     assert(urls.any? { |url| url.end_with?(".css") }, "the sign-in page links no stylesheet")
