@@ -21,6 +21,21 @@ module Users
 
     before_action :redirect_if_signed_in, only: :two_factor
 
+    # The sign-in form has one home: the landing page's card. A direct visit -
+    # a bookmark, or the redirect a protected page hands a guest - goes there
+    # instead of rendering a bare Devise page in the chrome. The frame the card
+    # loads asks for ?embedded=1 and gets Devise's screen, so the redirect only
+    # covers the full-page render and cannot loop inside the overlay.
+    def new
+      # A failed POST is recalled into this action to re-render the form with
+      # its error, so only a fresh GET (a bookmark or a guest's redirect) is
+      # handed to the landing page. Signed-in visitors and the card's embedded
+      # frame keep Devise's own screen.
+      return super unless request.get? && !user_signed_in? && !embedded_auth?
+
+      redirect_to root_path(auth: "sign-in")
+    end
+
     # Step one. An MFA account that got the password right is sent to the code
     # step; everyone else falls through to Devise's own create.
     def create

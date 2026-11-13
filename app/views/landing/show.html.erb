@@ -1,4 +1,7 @@
-<main class="landing" aria-labelledby="landing-title">
+<%# A deep link to sign-in arrives here as /?auth=sign-in. Naming the card on
+    the page keeps the choice server-side, so dashboard.js only has to open the
+    link with that name; without JavaScript the page still offers both links. %>
+<main class="landing" aria-labelledby="landing-title"<% if params[:auth].present? %> data-auth-autoload="<%= params[:auth] %>"<% end %>>
   <small id="edition">News aggregator</small>
   <h1 id="landing-title">NewsAgg: Your media aggregator</h1>
   <p class="landing-lede">Browse the archive by subject, publisher, discovery source, or technical depth.</p>

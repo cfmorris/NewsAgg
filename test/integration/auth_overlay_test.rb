@@ -127,8 +127,10 @@ TestReport.run do
            "the embedded form is still submitted by Turbo, which swallows the failure page: #{embedded_form}")
 
     # The frame carries the same form as the full page, field for field - the
-    # CSRF token included.
-    session.get("/users/sign_in")
+    # CSRF token included. A deep link now hands the guest to this card, so the
+    # full-page render to compare against is the one Devise recalls after a
+    # failed attempt.
+    session.post("/users/sign_in", user: { email: "no-such-account@example.com", password: "wrong" })
     full_form = form_for_path(session.last_response.body, "/users/sign_in")
     assert(full_form, "the full sign-in page renders no form")
     assert(field_names(embedded_form) - ["embedded"] == field_names(full_form),
@@ -169,6 +171,34 @@ TestReport.run do
            "the page a direct sign-in visit lands on offers no sign-in form")
     assert(!response.body.include?('class="auth-card"'),
            "the full sign-in page renders the embedded card")
+  end
+
+  # A bookmark to the sign-in route, or a protected page's redirect, has to
+  # meet the same card as every other way into sign-in instead of a bare Devise
+  # page in the chrome. The landing page names the card; the script opens the
+  # trigger with that name.
+  check "a sign-in deep link lands on the landing page that opens the card" do
+    session = new_session
+    session.get("/users/sign_in")
+
+    assert(session.last_response.status == 302,
+           "GET /users/sign_in answered #{session.last_response.status}")
+    assert(session.last_response["Location"].to_s.end_with?("/?auth=sign-in"),
+           "GET /users/sign_in redirected to #{session.last_response['Location'].inspect}")
+
+    session.follow_redirect!
+    assert(session.last_response.status == 200,
+           "the landing page answered #{session.last_response.status}")
+    main = session.last_response.body[/<main[^>]*class="landing"[^>]*>/m]
+    assert(main&.include?('data-auth-autoload="sign-in"'),
+           "the landing page does not name the sign-in card: #{main.inspect}")
+
+    autoload = new_session.get("/dashboard.js").body[/function autoload\(\)[\s\S]*?\n  \}/]
+    assert(autoload, "the overlay script has no autoload step")
+    assert(autoload.include?(%("[data-auth-autoload]")),
+           "the autoload step never reads the card the landing page names")
+    assert(autoload.include?(%("[data-auth-overlay]")),
+           "the autoload step does not go through the trigger link a click would use")
   end
 
   # The frame used to pin itself to a fixed 520px, so the taller card scrolled

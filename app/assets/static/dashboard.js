@@ -397,6 +397,33 @@
     lastTrigger = null;
   }
 
+  // A deep link to sign-in lands on /?auth=sign-in, and the landing page names
+  // the card to open. Open it through the same [data-auth-overlay] link a click
+  // would use, so the frame source, the title and the focus all behave alike.
+  function autoload() {
+    var main = document.querySelector("[data-auth-autoload]");
+    var name = main && main.getAttribute("data-auth-autoload");
+    var root = overlay();
+    if (!name || !root || !root.hidden) return;
+
+    var links = document.querySelectorAll("[data-auth-overlay]");
+    for (var i = 0; i < links.length; i++) {
+      if (links[i].getAttribute("data-auth-overlay") === name) {
+        open(links[i]);
+        return;
+      }
+    }
+  }
+
+  document.addEventListener("turbo:load", autoload);
+  // The script is deferred, so the document is already parsed here; the
+  // readyState branch covers the same script served without defer.
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", autoload);
+  } else {
+    autoload();
+  }
+
   document.addEventListener("click", function (event) {
     if (!event.target || !event.target.closest) return;
 

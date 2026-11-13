@@ -364,6 +364,8 @@ TestReport.run do
            "a repeat request answered #{session.last_response.status}"
 
     session.follow_redirect!
+    # The sign-in route hands a guest on to the landing page's card.
+    session.follow_redirect! if session.last_response.redirect?
     assert session.last_response.status == 200, "the sign-in page answered #{session.last_response.status}"
     assert !session.last_response.body.include?("Change password"),
            "the disabled account was shown the account forms"
