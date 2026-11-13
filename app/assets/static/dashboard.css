@@ -1314,8 +1314,14 @@ turbo-frame[busy] #count {
 .auth-overlay-frame {
   display: block;
   width: 100%;
-  height: 520px;
+  /* A frame never shrink-wraps the card it carries, so dashboard.js measures
+     the card and gives the frame that height; a fixed height assumed one
+     form's length and cut the taller one off at both ends. The cap keeps a
+     long form, or a short window, on screen: past it the card scrolls inside
+     the frame while the close control stays pinned to the dialog. */
+  height: auto;
   max-height: calc(100vh - 2.5rem);
+  overflow: auto;
   border: 0;
   background: var(--surface);
   color-scheme: dark;
